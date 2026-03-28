@@ -1,6 +1,7 @@
 {
   "name": "ofative-calendar-platform",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
