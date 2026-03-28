@@ -1,0 +1,11 @@
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './e2e',
+  baseURL: process.env.STAGING_URL ?? 'http://localhost:5173',
+  use: { trace: 'on-first-retry' },
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
+  ],
+})
