@@ -1,7 +1,0 @@
-export { supabase } from './client'
-export { useRealtimeQuery } from './useRealtimeQuery'
-export { useAuth } from './useAuth'
-export { globalSearch } from './globalSearch'
-export type { SearchResult } from './globalSearch'
-export type { AuthState } from './useAuth'
-export type { RealtimeConfig } from './useRealtimeQuery'
