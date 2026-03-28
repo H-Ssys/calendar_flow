@@ -1,6 +1,7 @@
 """Tests for JWT authentication across all endpoints."""
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
 
 
@@ -11,13 +12,14 @@ async def test_valid_token_passes(test_app: AsyncClient, valid_token: str) -> No
     assert resp.status_code == 200  # health doesn't need auth
 
     # Notes search requires auth -- with valid token it should reach the handler
-    # (may fail with connection error to SiYuan, but NOT 401)
-    resp = await test_app.post(
-        "/api/v1/notes/search",
-        json={"query": "test"},
-        headers={"Authorization": f"Bearer {valid_token}"},
-    )
-    assert resp.status_code != 401
+    with patch("app.api.v1.notes._siyuan_request", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {"code": 0, "data": {"blocks": []}}
+        resp = await test_app.post(
+            "/api/v1/notes/search",
+            json={"query": "test"},
+            headers={"Authorization": f"Bearer {valid_token}"},
+        )
+        assert resp.status_code != 401
 
 
 @pytest.mark.asyncio

@@ -30,12 +30,18 @@ sync_service = SiYuanSyncService()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start background services on startup, clean up on shutdown."""
-    # Start SiYuan sync background task
-    await sync_service.start()
+    # Start SiYuan sync background task (graceful — skip if connection fails)
+    try:
+        await sync_service.start()
+    except Exception:
+        logger.warning("SiYuan sync service failed to start — running without sync")
     logger.info("Application started")
     yield
     # Shutdown
-    await sync_service.stop()
+    try:
+        await sync_service.stop()
+    except Exception:
+        pass
     logger.info("Application shut down")
 
 

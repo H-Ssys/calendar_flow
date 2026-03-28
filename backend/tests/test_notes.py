@@ -59,14 +59,13 @@ async def test_search_notes_with_auth(test_app: AsyncClient, valid_token: str) -
         "code": 0,
         "data": {"blocks": [{"id": "block1", "content": "test"}]},
     }
-    mock_response.raise_for_status = AsyncMock()
+    mock_response.raise_for_status = lambda: None
 
-    with patch("app.api.v1.notes.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client_cls.return_value = mock_client
+    with patch("app.api.v1.notes._siyuan_request", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {
+            "code": 0,
+            "data": {"blocks": [{"id": "block1", "content": "test"}]},
+        }
 
         resp = await test_app.post(
             "/api/v1/notes/search",
@@ -81,20 +80,11 @@ async def test_search_notes_with_auth(test_app: AsyncClient, valid_token: str) -
 @pytest.mark.asyncio
 async def test_get_note_with_auth(test_app: AsyncClient, valid_token: str) -> None:
     """GET /api/v1/notes/{id} with valid auth should reach handler."""
-    mock_response = AsyncMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "code": 0,
-        "data": {"kramdown": "# Test"},
-    }
-    mock_response.raise_for_status = AsyncMock()
-
-    with patch("app.api.v1.notes.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client_cls.return_value = mock_client
+    with patch("app.api.v1.notes._siyuan_request", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {
+            "code": 0,
+            "data": {"kramdown": "# Test"},
+        }
 
         resp = await test_app.get(
             "/api/v1/notes/block123",
@@ -108,20 +98,11 @@ async def test_get_note_with_auth(test_app: AsyncClient, valid_token: str) -> No
 @pytest.mark.asyncio
 async def test_export_note_with_auth(test_app: AsyncClient, valid_token: str) -> None:
     """POST /api/v1/notes/export/{id} with valid auth should reach handler."""
-    mock_response = AsyncMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "code": 0,
-        "data": {"content": "# Exported"},
-    }
-    mock_response.raise_for_status = AsyncMock()
-
-    with patch("app.api.v1.notes.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client_cls.return_value = mock_client
+    with patch("app.api.v1.notes._siyuan_request", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {
+            "code": 0,
+            "data": {"content": "# Exported"},
+        }
 
         resp = await test_app.post(
             "/api/v1/notes/export/block123",
