@@ -23,6 +23,7 @@ async def verify_token(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
+            audience="authenticated",
             options={"require_sub": True},
         )
         user_id = payload.get("sub")
