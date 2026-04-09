@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/flow/calendar-main && git pull --rebase origin main 2>&1 | tail -3"
+          }
+        ],
+        "description": "Pull latest vault changes before session"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs'),p='docs/vault/12-session-resume/';try{const f=fs.readdirSync(p).filter(x=>x.endsWith('.md')).sort().pop();if(f)console.log(fs.readFileSync(p+f,'utf8'));else console.log('No previous session')}catch(e){console.log('No previous session')}\""
+          }
+        ],
+        "description": "Load last session resume"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Write a session resume to docs/vault/12-session-resume/ with today's date as filename (YYYY-MM-DD-session.md). Include: what was accomplished, current workflow step (read from docs/vault/10-sync/workflow-state.md), what's next, vault files updated, and a one-line resume instruction. Also append a cost entry to docs/vault/11-cost-tracking/cost-log.md with estimated token usage.",
+            "timeout": 30
+          }
+        ],
+        "description": "Auto-write session resume and cost log on exit"
+      }
+    ]
+  }
+}
