@@ -1,0 +1,4 @@
+packages:
+  - 'calendar-main'
+  - 'packages/*'
+  - 'backend'
