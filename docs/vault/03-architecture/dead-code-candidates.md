@@ -2,23 +2,25 @@
 type: dead-code
 updated: 2026-04-11
 scan: step-8
+m0-cleanup: 2026-04-11
 ---
 
 # Dead Code Candidates
 
 25 items across 5 categories. Estimated removable: ~3,500 lines.
+**M0 cleanup (2026-04-11)**: Items 1–5 deleted, items 17–18 already absent. ~926 lines removed.
 
 ---
 
 ## Category 1: Confirmed Dead (safe to delete now)
 
-| # | File/Directory | Lines | Reason |
+| # | File/Directory | Lines | Status |
 |---|---------------|-------|--------|
-| 1 | `backend/` (entire directory) | ~700 | Older scaffold, never executed. flow-api/ is canonical. Confirmed Step 5. |
-| 2 | `src/temp_event_helper.ts` | 89 | Dev-only mock date generator with console.log. Not imported anywhere. |
-| 3 | `vite.frontend.config.ts` | 20 | Alternate Vite config, not in any build script. |
-| 4 | `tailwind.frontend.config.ts` | 91 | Alternate Tailwind config, not consumed. |
-| 5 | `index.frontend.html` | 26 | Alternate HTML entry, only used by #3 (also dead). |
+| 1 | `backend/` (entire directory) | ~700 | **DELETED — M0** |
+| 2 | `src/temp_event_helper.ts` | 89 | **DELETED — M0** |
+| 3 | `vite.frontend.config.ts` | 20 | **DELETED — M0** |
+| 4 | `tailwind.frontend.config.ts` | 91 | **DELETED — M0** |
+| 5 | `index.frontend.html` | 26 | **DELETED — M0** |
 | 6 | `flow-api/app/services/ocr_service.py` | 20 | Stub superseded by `ai_providers.run_ocr`. Zero imports. |
 
 **Subtotal**: ~946 lines
@@ -67,8 +69,8 @@ Root `/` has numbered folders and templates duplicating `docs/vault/`.
 | 14 | Root `00-inbox/` through `12-session-resume/` | Delete (docs/vault/ is canonical) |
 | 15 | Root `templates/` (14 files) | Move to `docs/vault/templates/` or delete |
 | 16 | Root `.obsidian/` | Move to `docs/vault/.obsidian/` |
-| 17 | `setup-vault.bat`, `sync.bat` | Delete (Windows, VPS is Linux) |
-| 18 | `Welcome.md` | Delete (Obsidian default) |
+| 17 | `setup-vault.bat`, `sync.bat` | **ALREADY ABSENT** (deleted prior) |
+| 18 | `Welcome.md` | **ALREADY ABSENT** (deleted prior) |
 
 ---
 

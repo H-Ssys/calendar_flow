@@ -35,7 +35,7 @@ describe('exportAllDataJSON', () => {
 
     it('includes existing localStorage data', () => {
         store['calendar-events'] = JSON.stringify([{ id: 'e1', title: 'Test Event' }]);
-        store['tasks'] = JSON.stringify([{ id: 't1', title: 'Test Task' }]);
+        store['ofative-tasks'] = JSON.stringify([{ id: 't1', title: 'Test Task' }]);
 
         const result = JSON.parse(exportAllDataJSON());
         expect(result.events).toHaveLength(1);
@@ -131,7 +131,7 @@ describe('importAllData', () => {
 
         // Verify localStorage was updated
         expect(JSON.parse(store['calendar-events'])).toHaveLength(2);
-        expect(JSON.parse(store['tasks'])).toHaveLength(1);
+        expect(JSON.parse(store['ofative-tasks'])).toHaveLength(1);
     });
 
     it('imports journal data', () => {
@@ -152,16 +152,16 @@ describe('importAllData', () => {
 describe('resetAllData', () => {
     it('removes all known keys', () => {
         store['calendar-events'] = '[]';
-        store['tasks'] = '[]';
-        store['notes'] = '[]';
+        store['ofative-tasks'] = '[]';
+        store['ofative-notes'] = '[]';
         store['daily-journal-default-user'] = '{}';
         store['focus-timer-state'] = '{}';
 
         resetAllData();
 
         expect(store['calendar-events']).toBeUndefined();
-        expect(store['tasks']).toBeUndefined();
-        expect(store['notes']).toBeUndefined();
+        expect(store['ofative-tasks']).toBeUndefined();
+        expect(store['ofative-notes']).toBeUndefined();
         expect(store['daily-journal-default-user']).toBeUndefined();
         expect(store['focus-timer-state']).toBeUndefined();
     });

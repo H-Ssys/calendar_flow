@@ -11,7 +11,7 @@ total_files: 5 (+ 2 tests)
 
 Five pure TS modules + 2 vitest test files. All persistence is **`localStorage`**; no HTTP/Supabase yet.
 
-> **🚨 Known bug:** `dataService.ts` reads/writes `calendar-events`, `tasks`, `notes`, `daily-journal-default-user`, `focus-timer-state`. But `taskService` and `noteService` actually persist under `ofative-tasks` and `ofative-notes`. **Export/import/reset silently miss notes and tasks** — must fix before Phase 4 migration.
+> **✅ Fixed (M0, 2026-04-11):** `dataService.ts` now uses `ofative-tasks` and `ofative-notes`, matching `taskService`/`noteService`. Export/import/reset work correctly.
 
 ---
 

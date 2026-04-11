@@ -25,8 +25,8 @@ export const exportAllDataJSON = (): string => {
         version: '1.0',
         exportedAt: new Date().toISOString(),
         events: JSON.parse(localStorage.getItem('calendar-events') || '[]'),
-        tasks: JSON.parse(localStorage.getItem('tasks') || '[]'),
-        notes: JSON.parse(localStorage.getItem('notes') || '[]'),
+        tasks: JSON.parse(localStorage.getItem('ofative-tasks') || '[]'),
+        notes: JSON.parse(localStorage.getItem('ofative-notes') || '[]'),
         journal: JSON.parse(localStorage.getItem('daily-journal-default-user') || '{}'),
     };
     return JSON.stringify(data, null, 2);
@@ -84,12 +84,12 @@ export const importAllData = (jsonString: string): ImportResult => {
         }
 
         if (Array.isArray(data.tasks)) {
-            localStorage.setItem('tasks', JSON.stringify(data.tasks));
+            localStorage.setItem('ofative-tasks', JSON.stringify(data.tasks));
             taskCount = data.tasks.length;
         }
 
         if (Array.isArray(data.notes)) {
-            localStorage.setItem('notes', JSON.stringify(data.notes));
+            localStorage.setItem('ofative-notes', JSON.stringify(data.notes));
             noteCount = data.notes.length;
         }
 
@@ -111,8 +111,8 @@ export const importAllData = (jsonString: string): ImportResult => {
 
 export const resetAllData = () => {
     localStorage.removeItem('calendar-events');
-    localStorage.removeItem('tasks');
-    localStorage.removeItem('notes');
+    localStorage.removeItem('ofative-tasks');
+    localStorage.removeItem('ofative-notes');
     localStorage.removeItem('daily-journal-default-user');
     localStorage.removeItem('focus-timer-state');
 };
