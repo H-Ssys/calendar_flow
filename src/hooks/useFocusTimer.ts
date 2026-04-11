@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import * as focusSupabaseService from '@/services/supabase/focusSupabaseService';
+import { useAuthContext } from '@/context/AuthContext';
 
 // ─── State ───
 
@@ -11,9 +13,12 @@ export interface FocusTimerState {
     activeTaskId: string | null;
 }
 
+// ─── Feature flag ───
+const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
+
 const STORAGE_KEY = 'focus-timer-state';
 
-const loadState = (): FocusTimerState | null => {
+const loadStateLocal = (): FocusTimerState | null => {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
@@ -21,14 +26,17 @@ const loadState = (): FocusTimerState | null => {
     } catch { return null; }
 };
 
-const saveState = (state: FocusTimerState) => {
+const saveStateLocal = (state: FocusTimerState) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 };
 
 // ─── Hook ───
 
 export const useFocusTimer = (workMinutes = 25, breakMinutes = 5) => {
-    const initial = loadState();
+    const { user } = useAuthContext();
+    const userId = user?.id;
+
+    const initial = USE_SUPABASE ? null : loadStateLocal();
 
     const [state, setState] = useState<FocusTimerState>(initial ?? {
         isActive: false,
@@ -40,9 +48,64 @@ export const useFocusTimer = (workMinutes = 25, breakMinutes = 5) => {
     });
 
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const supabaseRowIdRef = useRef<string | null>(null);
+    const supabaseLoadedRef = useRef(false);
+    const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Persist state changes
-    useEffect(() => { saveState(state); }, [state]);
+    // ── Supabase: hydrate latest live state on mount ───────────────
+    useEffect(() => {
+        if (!USE_SUPABASE || !userId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const row = await focusSupabaseService.fetchFocusState(userId);
+                if (cancelled) return;
+                if (row) {
+                    supabaseRowIdRef.current = row.id;
+                    const restored = focusSupabaseService.metadataToFocusState(row.metadata ?? {}, {
+                        isActive: false,
+                        isPaused: false,
+                        timeRemaining: workMinutes * 60,
+                        currentPhase: 'work',
+                        sessionsCompleted: 0,
+                        activeTaskId: null,
+                    });
+                    setState(restored);
+                }
+            } catch (err) {
+                console.error('[useFocusTimer] Failed to load focus state from Supabase:', err);
+            } finally {
+                supabaseLoadedRef.current = true;
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [userId, workMinutes]);
+
+    // ── Persist state changes ──────────────────────────────────────
+    useEffect(() => {
+        if (!USE_SUPABASE) {
+            saveStateLocal(state);
+            return;
+        }
+        // Supabase mode — debounce writes; don't write before initial hydration
+        if (!userId || !supabaseLoadedRef.current) return;
+
+        if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = setTimeout(() => {
+            focusSupabaseService
+                .saveFocusState(userId, state, supabaseRowIdRef.current)
+                .then((row) => {
+                    supabaseRowIdRef.current = row.id;
+                })
+                .catch((err) => {
+                    console.error('[useFocusTimer] Supabase saveFocusState failed:', err);
+                });
+        }, 500);
+
+        return () => {
+            if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+        };
+    }, [state, userId]);
 
     // Timer tick
     useEffect(() => {

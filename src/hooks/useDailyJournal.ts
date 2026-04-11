@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DailyJournalEntry, TimeSlot, UrgentTask, JournalGoals, JournalReflections } from '@/types/dailyJournal';
-import { getJournalByDate, upsertJournal, copyPlanFromPreviousDay } from '@/services/dailyJournalService';
+import { getJournalByDate, upsertJournal, copyPlanFromPreviousDay, subscribeToJournal } from '@/services/dailyJournalService';
 import { format } from 'date-fns';
 import { TimeConfig } from '@/context/CalendarContext';
 
@@ -31,24 +31,60 @@ export const useDailyJournal = ({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isDirtyRef = useRef(false);
 
-  // Load journal entry for the current date
+  // Load journal entry for the current date.
+  // In Supabase mode the service hydrates async — subscribe so this hook
+  // re-renders once the cache fills, then we re-read.
   useEffect(() => {
-    setIsLoading(true);
-    const loadedEntry = getJournalByDate(date, userId, timeConfig);
-    
-    if (loadedEntry) {
-      // Ensure urgentTasks exists (migration for old entries)
-      if (!loadedEntry.urgentTasks) {
-        loadedEntry.urgentTasks = [];
+    let cancelled = false;
+
+    const loadOrInit = (allowInit: boolean) => {
+      if (cancelled) return;
+      const loaded = getJournalByDate(date, userId, timeConfig);
+      if (loaded) {
+        if (!loaded.urgentTasks) loaded.urgentTasks = [];
+        setEntry(loaded);
+        setIsLoading(false);
+      } else if (allowInit) {
+        // Initialize a new entry only after we've heard from the backend at
+        // least once (otherwise we'd race the hydration and clobber state).
+        const newEntry = upsertJournal({}, date, userId, timeConfig);
+        setEntry(newEntry);
+        setIsLoading(false);
       }
-      setEntry(loadedEntry);
-    } else {
-      // Initialize new entry
-      const newEntry = upsertJournal({}, date, userId, timeConfig);
-      setEntry(newEntry);
+    };
+
+    setIsLoading(true);
+
+    // First try synchronously — for localStorage mode (or already-hydrated
+    // Supabase cache) this returns immediately.
+    const initialEntry = getJournalByDate(date, userId, timeConfig);
+    if (initialEntry) {
+      if (!initialEntry.urgentTasks) initialEntry.urgentTasks = [];
+      setEntry(initialEntry);
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
+
+    // Subscribe for async cache updates (Supabase hydration / refetch)
+    const unsubscribe = subscribeToJournal(userId, () => loadOrInit(true));
+
+    // If the sync read came up empty, give the async hydration one tick before
+    // we initialize a new entry. This avoids creating empty rows for users who
+    // already have data stored remotely.
+    if (!initialEntry) {
+      // Allow init only after the next subscriber notification — but as a
+      // safety net, also try after a short delay in case no events fire.
+      const t = setTimeout(() => loadOrInit(true), 200);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+        unsubscribe();
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [date, userId, timeConfig]);
 
   // Autosave function with debounce
