@@ -9,7 +9,7 @@ total_files: 3
 
 # Types Registry
 
-Three dedicated type files + Calendar types that live inline in `CalendarContext.tsx` (documented in contexts.md). Verbatim definitions below — these ARE the contracts.
+Three dedicated type files + Calendar types that live inline in `CalendarContext.tsx` (documented in [[contexts]]). Verbatim definitions below — these ARE the contracts.
 
 > **Note on CalendarEvent:** There is **no** `src/types/event.ts`. The canonical `Event` interface is exported from `@/context/CalendarContext` (lines 3–24). It is also re-exported under the alias `CalendarEvent` in `src/pages/Index.tsx`: `import { Event as CalendarEvent } from '@/context/CalendarContext'`. If you need to move it out of the context, put it in `src/types/event.ts` and re-export from the context for backward compat.
 
@@ -219,7 +219,7 @@ export interface DailyJournalEntry {
 
 ## Calendar types (live in `src/context/CalendarContext.tsx`)
 
-Declared inside the context file, exported as public API. See `contexts.md` for full listing. Summary:
+Declared inside the context file, exported as public API. See [[contexts]] for full listing. Summary:
 
 ```ts
 export interface Event {            // the canonical CalendarEvent

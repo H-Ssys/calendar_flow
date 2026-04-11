@@ -129,7 +129,7 @@ Three workspace packages under `packages/` — the v2 data layer intended to rep
 - **Exports**: `./tokens` → `tokens/index.ts`, `./tailwind.config` → `tailwind.config.ts`
 - **Peer**: `tailwindcss ^3.4.0`
 
-### Design tokens — see `docs/vault/06-design/system.md` for full values
+### Design tokens — see [[system]] for full values
 
 **Barrel export** (`tokens/index.ts`):
 - `COLORS`, `EVENT_COLORS`, `TASK_PRIORITY_COLORS`, `PDCA_OUTCOME_COLORS`
