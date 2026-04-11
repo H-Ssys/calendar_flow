@@ -1,21 +1,58 @@
 ---
 type: workflow-state
-current_workflow: m3-tasks-migration
+current_workflow: m4-notes-migration
 current_step: 1
-feature_name: tasks-migration
+feature_name: notes-migration
 status: complete
-last_updated: 2026-04-11T22:00:00Z
-last_step_summary: "M3 Tasks Migration complete. TaskContext dual-mode: VITE_USE_SUPABASE='true' → tasks/subtasks tables + realtime, otherwise localStorage. Migration 010 adds tasks.metadata JSONB for v1-only fields (linkedEventIds, actualResult, lessonsLearned, category, color, order, activityLog). Status 'in-progress' ↔ 'in_progress' and priority 'urgent' ↔ 'critical' enum mapping. Subtasks use real subtasks table. Build verified ✓"
+last_updated: 2026-04-11T23:00:00Z
+last_step_summary: "M4 Notes Migration complete. NoteContext dual-mode: VITE_USE_SUPABASE='true' → notes table + realtime, otherwise localStorage. Migration 011 adds notes.metadata JSONB for v1-only fields (category, isFavorite, linkedDate, linkedEventIds). Excerpt is recomputed on read (not stored in v2). All CRUD ops optimistic with rollback. Build verified ✓"
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m3-tasks-migration
-- **Step**: M3 — Complete
-- **Feature**: TaskContext migration to Supabase
+- **Workflow**: m4-notes-migration
+- **Step**: M4 — Complete
+- **Feature**: NoteContext migration to Supabase
 - **Status**: complete
+
+## M4 Notes Migration (2026-04-11)
+| Task | Status | Summary |
+|------|--------|---------|
+| Migration 011 | done | ALTER TABLE notes ADD COLUMN metadata JSONB DEFAULT '{}' |
+| noteTypeMapper.ts | done | mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 with metadata merge |
+| noteSupabaseService.ts | done | fetchNotes, createNote, updateNote, deleteNote, subscribeToNotes |
+| NoteContext.tsx | done | Dual-mode: addNote, updateNote, deleteNote, togglePin, toggleFavorite, setActiveNote (auto-clean draft) |
+| Optimistic updates | done | All CRUD ops update local state immediately, rollback on error |
+| Undo (deleteNote) | done | Local re-add + Supabase re-create on undo click |
+| Auto-clean draft | done | Empty Untitled drafts deleted locally + remotely on setActiveNote |
+| Build verified | done | npx vite build → ✓ built in 891ms |
+
+### Type Mismatches (v1 Note ↔ v2 notes table)
+| v1 Field | v2 Column | Mapping |
+|----------|-----------|---------|
+| id: string | id: UUID | Direct (v1 IDs are non-UUID — known issue across modules) |
+| title | title | Direct |
+| content | content | Direct |
+| excerpt | — | **DERIVED** — recomputed via getExcerpt() on read |
+| tags[] | tags[] | Direct |
+| color | color | Direct |
+| isPinned | is_pinned | Direct rename |
+| wordCount | word_count | Direct rename |
+| createdAt: Date | created_at: string | Date ↔ ISO string |
+| updatedAt: Date | updated_at: string | Date ↔ ISO string |
+| **v1-only fields → notes.metadata JSONB** | | |
+| category | metadata.category | JSONB |
+| isFavorite | metadata.isFavorite | JSONB |
+| linkedDate?: Date | metadata.linkedDate (ISO) | JSONB (linking tables future work) |
+| linkedEventIds | metadata.linkedEventIds | JSONB (event_notes table future work) |
+| **v2-only fields (defaulted on write)** | | |
+| — | vault_path | '/' |
+| — | backlinks | [] |
+| — | is_daily_note | false |
+| — | visibility | 'private' |
+| — | siyuan_* | null |
 
 ## M3 Tasks Migration (2026-04-11)
 | Task | Status | Summary |
@@ -119,6 +156,8 @@ retry_count: 0
 | 0–8 | Codebase Scanner | done | Full scan (299 files, 25 dead code items) |
 
 ## Next Recommended Actions
-- **M3** — Wire TaskContext to Supabase (tasks CRUD)
-- **M4** — Wire NoteContext to Supabase (notes CRUD)
+- **M5** — Wire ContactContext (or contacts feature) to Supabase
+- **M6** — Update dataService.ts (export/import) to read from Supabase when in dual-mode
+- **P1** — Fix non-UUID v1 IDs across modules (notes, tasks, events) for Supabase compatibility
 - **P2** — Event audit logs: create event_audit_log table or skip entirely
+- **P3** — Cross-module linking tables (event_notes, contact_notes, event_tasks) — currently JSONB metadata

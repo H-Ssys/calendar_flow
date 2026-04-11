@@ -1,7 +1,7 @@
 ---
 type: registry
 category: contexts
-updated: 2026-04-09
+updated: 2026-04-11
 scan_step: 3/8
 scope: src/context/
 total_files: 3
@@ -147,8 +147,24 @@ searchResults: Note[]            // derived via noteService.searchNotes
 - Derived lists memoized.
 - Uses `sonner` for toasts on note actions.
 
+### Supabase Dual-Mode (M4, 2026-04-11)
+- **Feature flag**: `VITE_USE_SUPABASE === 'true'` → Supabase mode, otherwise localStorage
+- **Service**: `src/services/supabase/noteSupabaseService.ts` — fetchNotes, createNote, updateNote, deleteNote, subscribeToNotes
+- **Type mapper**: `src/utils/noteTypeMapper.ts` — mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 with metadata merge
+- **Migration**: `supabase/migrations/011_note_metadata.sql` — adds `metadata JSONB DEFAULT '{}'` to notes
+- **CRUD pattern**: Optimistic local update → async Supabase call → rollback on error
+- **Realtime**: subscribeToNotes refetches full note list on any postgres_changes event
+- **Undo delete**: Local re-add + Supabase re-create
+- **Auto-clean draft**: Empty Untitled drafts removed locally + remotely on setActiveNote
+- **Excerpt**: Recomputed via `getExcerpt()` on read (not stored in v2 — derived field)
+- **Metadata cache**: `metadataByNoteId` ref tracks v2 metadata blob per note ID for correct merge on partial updates
+- **v1-only fields → metadata JSONB**: category, isFavorite, linkedDate, linkedEventIds
+- **v2-only fields defaulted on write**: vault_path='/', backlinks=[], is_daily_note=false, visibility='private', siyuan_*=null
+- **noteService.ts not modified**: Still used by dataService for export/import (M6 will update dataService)
+
 ### ⚠ Issues
-- Storage key `ofative-notes` does NOT match `dataService.ts` (which reads `notes`). Export/import/reset are broken for notes.
+- Storage key `ofative-notes` does NOT match `dataService.ts` (which reads `notes`). Export/import/reset are broken for notes. (M0 fixed dataService for tasks; notes still need M6.)
+- v1 IDs are `note-{ts}-{rand}` strings, not UUIDs — Supabase notes.id requires UUID. Cross-module known issue (P1).
 
 ---
 

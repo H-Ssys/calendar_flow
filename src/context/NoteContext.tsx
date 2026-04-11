@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { Note } from '@/types/note';
 import {
     loadNotes, saveNotes, searchNotes as searchNotesService,
     generateNoteId, getWordCount, getExcerpt
 } from '@/services/noteService';
+import * as noteSupabaseService from '@/services/supabase/noteSupabaseService';
+import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/noteTypeMapper';
+import { useAuthContext } from './AuthContext';
 import { toast } from 'sonner';
+
+// ── Feature flag: 'true' → Supabase, anything else → localStorage ──
+const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
 
 // ========== Context Type ==========
 
@@ -50,14 +56,54 @@ export const useNoteContext = () => {
 // ========== Provider ==========
 
 export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [notes, setNotes] = useState<Note[]>(() => loadNotes());
+    const { user } = useAuthContext();
+    const userId = user?.id;
+
+    const [notes, setNotes] = useState<Note[]>(() => {
+        if (USE_SUPABASE) return []; // hydrated async via useEffect
+        return loadNotes();
+    });
     const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated');
     const [filterTag, setFilterTag] = useState<string | null>(null);
 
-    // Persist on change
+    // Track raw v2 metadata per note ID so update mapper can merge correctly
+    const metadataByNoteId = useRef<Record<string, Record<string, unknown>>>({});
+
+    // Track latest activeNoteId for use inside async error handlers
+    const activeNoteIdRef = useRef<string | null>(null);
+    useEffect(() => { activeNoteIdRef.current = activeNoteId; }, [activeNoteId]);
+
+    // ── Refetch helper (Supabase mode) ───────────────────────────────
+    const refetchFromSupabase = useCallback(async () => {
+        if (!USE_SUPABASE || !userId) return;
+        try {
+            const rows = await noteSupabaseService.fetchNotes(userId);
+            metadataByNoteId.current = {};
+            const v1Notes = rows.map((row) => {
+                metadataByNoteId.current[row.id] = row.metadata ?? {};
+                return mapV2ToV1(row);
+            });
+            setNotes(v1Notes);
+        } catch (err) {
+            console.error('[NoteContext] Failed to fetch notes from Supabase:', err);
+        }
+    }, [userId]);
+
+    // ── Supabase mode: fetch on mount + realtime subscription ────────
     useEffect(() => {
+        if (!USE_SUPABASE || !userId) return;
+        refetchFromSupabase();
+        const unsubscribe = noteSupabaseService.subscribeToNotes(userId, () => {
+            refetchFromSupabase();
+        });
+        return () => { unsubscribe(); };
+    }, [userId, refetchFromSupabase]);
+
+    // ── localStorage mode: persist on change ─────────────────────────
+    useEffect(() => {
+        if (USE_SUPABASE) return;
         saveNotes(notes);
     }, [notes]);
 
@@ -67,8 +113,9 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // CRUD
     const addNote = useCallback((partial?: Partial<Note>) => {
         const now = new Date();
+        const noteId = generateNoteId();
         const newNote: Note = {
-            id: generateNoteId(),
+            id: noteId,
             title: partial?.title || 'Untitled Note',
             content: partial?.content || '',
             excerpt: '',
@@ -83,37 +130,85 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             updatedAt: now,
             wordCount: 0,
             ...partial,
+            // Re-override the auto-generated fields after spread
+            id: noteId,
+            createdAt: now,
+            updatedAt: now,
         };
-        newNote.id = generateNoteId(); // Ensure unique ID
-        newNote.createdAt = now;
-        newNote.updatedAt = now;
+        // Optimistic local update
         setNotes(prev => [newNote, ...prev]);
         setActiveNoteId(newNote.id);
         toast.success('Note created');
+
+        if (USE_SUPABASE && userId) {
+            const v2Note = mapV1ToV2(newNote, userId);
+            noteSupabaseService.createNote(userId, v2Note).then((row) => {
+                metadataByNoteId.current[row.id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[NoteContext] Supabase createNote failed, rolling back:', err);
+                setNotes(prev => prev.filter(n => n.id !== newNote.id));
+                if (activeNoteIdRef.current === newNote.id) setActiveNoteId(null);
+            });
+        }
+
         return newNote;
-    }, []);
+    }, [userId]);
 
     const updateNote = useCallback((id: string, updates: Partial<Note>) => {
+        let previous: Note | undefined;
+        const now = new Date();
+        // Compute the updated patch with derived fields so we can pass them to the mapper too
+        const patch: Partial<Note> = { ...updates, updatedAt: now };
+        if (updates.content !== undefined) {
+            patch.wordCount = getWordCount(updates.content);
+        }
+
         setNotes(prev => prev.map(n => {
             if (n.id !== id) return n;
-            const updated = { ...n, ...updates, updatedAt: new Date() };
-            // Auto-update word count and excerpt when content changes
+            previous = n;
+            const updated: Note = { ...n, ...patch };
+            // Auto-update excerpt when content changes (excerpt is derived, not persisted in v2)
             if (updates.content !== undefined) {
-                updated.wordCount = getWordCount(updates.content);
                 updated.excerpt = getExcerpt(updates.content);
             }
             return updated;
         }));
+
+        if (USE_SUPABASE) {
+            const existingMeta = metadataByNoteId.current[id] ?? {};
+            const v2Updates = mapV1UpdateToV2(patch, existingMeta);
+            noteSupabaseService.updateNote(id, v2Updates).then((row) => {
+                metadataByNoteId.current[id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[NoteContext] Supabase updateNote failed, rolling back:', err);
+                if (previous) {
+                    setNotes(prev => prev.map(n => n.id === id ? previous! : n));
+                }
+            });
+        }
     }, []);
 
     const deleteNote = useCallback((id: string) => {
+        let deleted: Note | undefined;
         setNotes(prev => {
-            const noteToDelete = prev.find(n => n.id === id);
-            if (noteToDelete) {
+            deleted = prev.find(n => n.id === id);
+            if (deleted) {
                 toast.success('Note deleted', {
                     action: {
                         label: 'Undo',
-                        onClick: () => setNotes(p => [noteToDelete, ...p]),
+                        onClick: () => {
+                            // Local-only undo for both modes
+                            setNotes(p => [deleted!, ...p]);
+                            // In Supabase mode, also re-create the note remotely
+                            if (USE_SUPABASE && userId && deleted) {
+                                const v2Note = mapV1ToV2(deleted, userId);
+                                noteSupabaseService.createNote(userId, v2Note).then((row) => {
+                                    metadataByNoteId.current[row.id] = row.metadata ?? {};
+                                }).catch((err) => {
+                                    console.error('[NoteContext] Undo: failed to recreate note in Supabase:', err);
+                                });
+                            }
+                        },
                     },
                     duration: 5000,
                 });
@@ -123,33 +218,84 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (activeNoteId === id) {
             setActiveNoteId(null);
         }
-    }, [activeNoteId]);
+
+        if (USE_SUPABASE) {
+            noteSupabaseService.deleteNote(id).then(() => {
+                delete metadataByNoteId.current[id];
+            }).catch((err) => {
+                console.error('[NoteContext] Supabase deleteNote failed, rolling back:', err);
+                if (deleted) {
+                    setNotes(prev => [deleted!, ...prev]);
+                }
+            });
+        }
+    }, [activeNoteId, userId]);
 
     // Actions
     const setActiveNote = useCallback((id: string | null) => {
         // Auto-clean: if the previously active note is empty and untitled, remove it
+        let toCleanupId: string | null = null;
         setNotes(prev => {
             if (activeNoteId && activeNoteId !== id) {
                 const prevNote = prev.find(n => n.id === activeNoteId);
                 if (prevNote && prevNote.title === 'Untitled Note' && !prevNote.content.trim()) {
+                    toCleanupId = activeNoteId;
                     return prev.filter(n => n.id !== activeNoteId);
                 }
             }
             return prev;
         });
         setActiveNoteId(id);
+
+        // If we just removed an empty draft, also delete it remotely
+        if (USE_SUPABASE && toCleanupId) {
+            noteSupabaseService.deleteNote(toCleanupId).then(() => {
+                delete metadataByNoteId.current[toCleanupId!];
+            }).catch((err) => {
+                console.error('[NoteContext] Cleanup deleteNote failed:', err);
+            });
+        }
     }, [activeNoteId]);
 
     const togglePin = useCallback((id: string) => {
-        setNotes(prev => prev.map(n =>
-            n.id === id ? { ...n, isPinned: !n.isPinned, updatedAt: new Date() } : n
-        ));
+        let nextPinned = false;
+        const now = new Date();
+        setNotes(prev => prev.map(n => {
+            if (n.id !== id) return n;
+            nextPinned = !n.isPinned;
+            return { ...n, isPinned: nextPinned, updatedAt: now };
+        }));
+
+        if (USE_SUPABASE) {
+            noteSupabaseService.updateNote(id, {
+                is_pinned: nextPinned,
+                updated_at: now.toISOString(),
+            }).then((row) => {
+                metadataByNoteId.current[id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[NoteContext] Supabase togglePin failed:', err);
+            });
+        }
     }, []);
 
     const toggleFavorite = useCallback((id: string) => {
-        setNotes(prev => prev.map(n =>
-            n.id === id ? { ...n, isFavorite: !n.isFavorite, updatedAt: new Date() } : n
-        ));
+        let nextFavorite = false;
+        const now = new Date();
+        setNotes(prev => prev.map(n => {
+            if (n.id !== id) return n;
+            nextFavorite = !n.isFavorite;
+            return { ...n, isFavorite: nextFavorite, updatedAt: now };
+        }));
+
+        if (USE_SUPABASE) {
+            const existingMeta = metadataByNoteId.current[id] ?? {};
+            const v2Updates = mapV1UpdateToV2({ isFavorite: nextFavorite, updatedAt: now }, existingMeta);
+            noteSupabaseService.updateNote(id, v2Updates).then((row) => {
+                metadataByNoteId.current[id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[NoteContext] Supabase toggleFavorite failed:', err);
+            });
+        }
     }, []);
 
     // Queries
