@@ -1,21 +1,43 @@
 ---
 type: workflow-state
-current_workflow: m7-cleanup-ship-v2
-current_step: 1
-feature_name: cleanup-ship-v2
+current_workflow: hotfix-supabase-url
+current_step: shipped
+feature_name: hotfix-supabase-url
 status: complete
-last_updated: 2026-04-12T02:00:00Z
-last_step_summary: "v2.0 migration complete. All data in Supabase."
+last_updated: 2026-04-11T14:03:00Z
+last_step_summary: "Hotfix: VITE_SUPABASE_URL 54322→54321, rebuilt + redeployed calendar_flow."
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m7-cleanup-ship-v2
-- **Step**: M7 — Complete (v2.0 SHIPPED)
-- **Feature**: Remove all localStorage code, feature flags, and v1 shims
+- **Workflow**: hotfix-supabase-url
+- **Step**: Shipped (2026-04-11)
+- **Feature**: Fix production CORS / auth refresh failures
 - **Status**: complete
+
+## HOTFIX: Supabase URL pointing at Studio not Kong (2026-04-11)
+| Task | Status | Summary |
+|------|--------|---------|
+| Diagnose CORS error | done | Preflight to `187.77.154.212:54322/auth/v1/token` rejected. 54322 is Studio (`socat → 10.0.2.7:3000`), not the API. Correct gateway is Kong on 54321 (`socat → 10.0.2.13:8000`). |
+| Kong CORS probe | done | `curl -X OPTIONS` to `54321/auth/v1/token` returns `Access-Control-Allow-Origin: *` — Kong is healthy. |
+| `.env` fix | done | `VITE_SUPABASE_URL` 54322 → 54321. `.env.example` already correct. |
+| Rebuild | done | `pnpm exec vite build` → new `input-DLQ5q6lq.js` bundle, bakes only 54321. |
+| Deploy | done | Purged stale `/usr/share/nginx/html/assets` + `index.html` in `calendar_flow`, `docker cp dist/.`, `nginx -s reload`. Stale `input-wLQZn1Rj.js` (had 54322) removed. |
+| Verify | done | Served bundle contains only `54321`; Kong preflight passes from `Origin: http://app.187.77.154.212.sslip.io`. |
+
+### Root cause
+Build-time env drift. `.env` at repo root pinned the v1/v2-era Studio URL (54322) instead of the Kong gateway (54321). `.env.example` documented the correct value but the live `.env` was never reconciled. Every subsequent build baked the wrong origin into the bundle.
+
+### Follow-ups
+- Add a build-time guard that rejects non-API Supabase URLs (e.g. if URL resolves to Studio port).
+- Consider serving Kong behind the same Coolify hostname so the frontend uses a relative path and avoids cross-origin entirely.
+- Add a smoke test: `curl -X OPTIONS http://app.187.77.154.212.sslip.io/__cors_check__` wired to Kong.
+
+---
+
+## M7 Cleanup + Ship v2.0 (2026-04-12)
 
 ## M7 Cleanup + Ship v2.0 (2026-04-12)
 | Task | Status | Summary |

@@ -1,7 +1,7 @@
 ---
 type: registry
 category: config
-updated: 2026-04-09
+updated: 2026-04-11
 scan_step: 4/8
 scope: project root
 ---
@@ -9,6 +9,8 @@ scope: project root
 # Config Files Registry
 
 Catalog of tooling, build, and workspace config at `/home/flow/calendar-main/`. Wires [[shared-packages]] into the frontend [[components]] build.
+
+> **⚠ Env drift trap (2026-04-11 hotfix).** `.env` had `VITE_SUPABASE_URL=http://187.77.154.212:54322` (Supabase **Studio**, port 3000). Correct value is `http://187.77.154.212:54321` (**Kong** gateway, port 8000). Every build bakes this URL into `dist/assets/input-*.js`; a wrong value breaks `/auth/v1/token` with CORS errors (Studio doesn't serve `/auth/v1`). Always cross-check `.env` against `.env.example` before `pnpm exec vite build`. See [[workflow-state]] hotfix entry and [[cost-log]].
 
 > **🚨 Build tooling is currently broken.** The recovered frontend ships non-standard file names (`vite.frontend.config.ts`, `tailwind.frontend.config.ts`, `index.frontend.html`) and is **missing `tsconfig.json` entirely**. `components.json` points shadcn at `tailwind.config.ts` which does not exist. `pnpm-workspace.yaml` declares a package `calendar-main` which **is the current directory itself** — the workspace layout is inside-out. Expect `pnpm install` / `pnpm dev` to fail without fixes.
 
