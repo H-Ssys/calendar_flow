@@ -9,7 +9,7 @@ total_files: 2
 
 # Utilities Registry
 
-Two small utility modules. Both pure, no side effects, no storage.
+Two small utility modules. Both pure, no side effects, no storage. Consumed by [[components]]; the `Event` type lives in [[contexts]] and [[types]].
 
 ---
 
@@ -60,3 +60,11 @@ export function cn(...inputs: ClassValue[]) {
 - **`cn` is the most-imported symbol in the app** (67 files).
 - **Duplication flag:** `DailyView` implements its own overlap-column algorithm inline; consolidate onto `layoutOverlappingEvents` during the next refactor of `DailyView`.
 - **No `src/utils/date.ts`, `src/utils/color.ts`, etc.** — date work is delegated to `date-fns`, color work stays in `CalendarContext.getCategoryColor`. No orphan utility modules to clean up.
+
+---
+
+## Related
+
+- Consumers: [[components]] · [[hooks]]
+- Contracts: [[contexts]] · [[types]]
+- Architecture: [[dependency-map]] · [[codebase-scan]]

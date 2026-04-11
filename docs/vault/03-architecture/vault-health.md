@@ -9,7 +9,7 @@ scan: step-8
 ## Critical
 
 - **Duplicate vault roots** — Root `/` and `/docs/vault/` both contain numbered folders (00-inbox through 12-session-resume). CLAUDE.md declares `docs/vault/` canonical. Root copies must be deleted. See [[dead-code-candidates]] Category 4.
-- **Templates misplaced** — 14 real template files at root `/templates/`, but `docs/vault/templates/` only has `README.md`. Templates must be moved to `docs/vault/templates/`.
+- **Templates misplaced** — 14 real template files at root `/templates/`, but `docs/vault/templates/` only has [[README]]. Templates must be moved to `docs/vault/templates/`.
 
 ## Warnings
 
