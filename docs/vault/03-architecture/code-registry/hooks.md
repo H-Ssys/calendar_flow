@@ -9,7 +9,7 @@ total_files: 8
 
 # Hooks Registry
 
-Eight hooks. Half are thin context/media helpers; four encapsulate real logic (daily journal, focus timer, global search, calendar keyboard).
+Eight hooks. Half are thin context/media helpers; four encapsulate real logic (daily journal, focus timer, global search, calendar keyboard). Most wrap [[contexts]] to expose derived state for [[components]]; persistence helpers delegate to [[services]].
 
 ---
 
@@ -87,3 +87,12 @@ Eight hooks. Half are thin context/media helpers; four encapsulate real logic (d
 - **Storage-writing hooks:** only `useFocusTimer` (`focus-timer-state`)
 - **Dead code candidates:** `useCalendarKeyboard` (verify wiring), `use-mobile.tsx` (duplicates `useMediaQuery`), `use-toast.ts` + shadcn `Toaster` (superseded by sonner)
 - **Cross-context coupling:** `useGlobalSearch` pulls all three business contexts — only place they converge outside pages.
+
+---
+
+## Related
+
+- Consumers: [[components]]
+- State sources: [[contexts]] · [[services]]
+- Contracts: [[types]]
+- Cross-cutting: [[patterns]] · [[dependency-map]]

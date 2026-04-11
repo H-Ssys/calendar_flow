@@ -53,9 +53,9 @@ Flow is a self-hosted productivity platform (calendar, tasks, notes, contacts, j
 ## Scan Progress
 
 - [x] Step 1: Project structure map
-- [x] Step 2: Frontend components registry
-- [x] Step 3: Contexts, hooks, services registry
-- [x] Step 4: Types, utilities, pages, config registry
+- [x] Step 2: Frontend [[components]] registry
+- [x] Step 3: [[contexts]], [[hooks]], [[services]] registry
+- [x] Step 4: [[types]], [[utilities]], pages, [[config]] registry
 - [x] Step 5: Backend registry (flow-api + backend overlap analysis)
 - [x] Step 6: Shared packages + v1 vs v2 gap analysis
 - [x] Step 7: Database registry (migrations, RLS, schema drift)
@@ -107,3 +107,12 @@ Flow is a self-hosted productivity platform (calendar, tasks, notes, contacts, j
 11. **Create v1->v2 adapter**: Status enum rename (in-progress->in_progress, urgent->critical), Date<->string, inline arrays -> junction tables
 12. **Phase out localStorage contexts** — Wire pages to v2 hooks, use id_mapping table for migration
 13. **SiYuan cleanup** — Remove references after TipTap editor ships
+
+---
+
+## Related
+
+- Registry: [[components]] · [[contexts]] · [[hooks]] · [[services]] · [[types]] · [[utilities]] · [[config]] · [[api-endpoints]] · [[supabase-tables]] · [[shared-packages]] · [[patterns]]
+- Architecture: [[dependency-map]] · [[dead-code-candidates]] · [[oversized-files]] · [[vault-health]]
+- ADR: [[adr-010-dual-mode-migration]]
+- Sync: [[workflow-state]]

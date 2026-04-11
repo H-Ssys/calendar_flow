@@ -39,3 +39,7 @@ What the user sees.
 
 ## Pattern
 [[pattern-name]] — category for future prevention
+
+## Related
+- [[patterns]]
+- [[session-resume]]

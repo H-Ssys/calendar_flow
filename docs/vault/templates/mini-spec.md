@@ -23,3 +23,6 @@ One paragraph: why now?
 ## Acceptance Test
 1. 
 2. 
+
+## Related
+- [[reuse-map]] · [[components]] · [[patterns]]

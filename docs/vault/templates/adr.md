@@ -38,4 +38,5 @@ Why this approach over alternatives?
 - 
 
 ## Related
-- [[]]
+- [[patterns]]
+- [[codebase-scan]]

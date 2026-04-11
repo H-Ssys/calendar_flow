@@ -9,7 +9,7 @@ total_files: 3
 
 # Types Registry
 
-Three dedicated type files + Calendar types that live inline in `CalendarContext.tsx` (documented in [[contexts]]). Verbatim definitions below — these ARE the contracts.
+Three dedicated type files + Calendar types that live inline in `CalendarContext.tsx` (documented in [[contexts]]). Verbatim definitions below — these ARE the contracts. v2 equivalents live in [[shared-packages]]; target rows are in [[supabase-tables]].
 
 > **Note on CalendarEvent:** There is **no** `src/types/event.ts`. The canonical `Event` interface is exported from `@/context/CalendarContext` (lines 3–24). It is also re-exported under the alias `CalendarEvent` in `src/pages/Index.tsx`: `import { Event as CalendarEvent } from '@/context/CalendarContext'`. If you need to move it out of the context, put it in `src/types/event.ts` and re-export from the context for backward compat.
 
@@ -275,3 +275,11 @@ Plus exported helpers `isMultiDayEvent(event)`, `getEventDurationDays(event)` an
 - **No `event.ts` yet** — Calendar types live in `CalendarContext.tsx`. Extracting to `src/types/event.ts` would decouple types from provider.
 - **`task.ts` is not pure types** — ships enums, constants, helpers, and a date-fns dependency. Consider splitting.
 - **Vietnamese labels** on `JournalGoals`/`JournalReflections` — translation is a UI-layer concern, types are locale-agnostic.
+
+---
+
+## Related
+
+- Consumers: [[contexts]] · [[components]] · [[services]] · [[hooks]]
+- v2 contracts: [[shared-packages]] · [[supabase-tables]]
+- Migration: [[adr-010-dual-mode-migration]]

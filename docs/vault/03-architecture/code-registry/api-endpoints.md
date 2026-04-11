@@ -7,6 +7,8 @@ scan: step-5
 
 # API Endpoints Registry
 
+FastAPI sidecar endpoints (`flow-api/`) that wrap [[services|backend services]] and write to [[supabase-tables]]. Config at [[config]].
+
 ## Overlap Analysis: `backend/` vs `flow-api/`
 
 | Dimension | `backend/` | `flow-api/` (canonical) |
@@ -275,3 +277,12 @@ Everything below exists ONLY in `backend/` and is NOT in `flow-api/`:
 | `flow-api/app/api/v1/transcribe.py` | Stub, not mounted in main.py |
 | `flow-api/app/api/v1/notes.py` | SiYuan-dependent, not mounted in main.py, SiYuan being replaced |
 | `backend/` (entire directory) | Older scaffold, never executed, superseded by flow-api/ |
+
+---
+
+## Related
+
+- Data: [[supabase-tables]] · [[shared-packages]]
+- Client: [[services]] · [[contexts]]
+- Config: [[config]]
+- Cleanup: [[dead-code-candidates]]

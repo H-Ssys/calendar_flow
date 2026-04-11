@@ -7,7 +7,7 @@ scan: step-8
 
 # Architectural Patterns Registry
 
-10 patterns identified across the codebase.
+10 patterns identified across the codebase. Cross-referenced to [[components]], [[contexts]], [[hooks]], [[services]], and [[supabase-tables]].
 
 ---
 
@@ -183,3 +183,12 @@ Additional `onKeyDown` handlers in TaskDetail (Enter for tags/subtasks), SearchC
 | Typed Supabase queries | `supabase` client | Pages still use localStorage |
 | Design token system | `@ofative/ui/tokens` | Not imported by src/ |
 | Tailwind preset | `@ofative/ui/tailwind.config` | Not consumed by root config |
+
+---
+
+## Related
+
+- State: [[contexts]] · [[hooks]] · [[services]]
+- UI: [[components]] · [[shared-packages]]
+- Data: [[supabase-tables]] · [[api-endpoints]] · [[types]]
+- Architecture: [[dependency-map]] · [[codebase-scan]]

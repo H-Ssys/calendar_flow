@@ -45,3 +45,7 @@ What would make users gasp?
 
 ## Phase Recommendation
 Phase {{N}} because:
+
+## Related
+- Next step: [[feature-spec]]
+- Scope context: [[codebase-scan]]

@@ -9,7 +9,7 @@ total_files: 5 (+ 2 tests)
 
 # Services Registry
 
-Five pure TS modules + 2 vitest test files. All persistence is **`localStorage`**; no HTTP/Supabase yet.
+Five pure TS modules + 2 vitest test files. All persistence is **`localStorage`**; no HTTP/Supabase yet. Consumed by [[contexts]]; operates on shapes defined in [[types]]; targets [[supabase-tables]] during Phase 4 migration.
 
 > **✅ Fixed (M0, 2026-04-11):** `dataService.ts` now uses `ofative-tasks` and `ofative-notes`, matching `taskService`/`noteService`. Export/import/reset work correctly.
 
@@ -146,3 +146,12 @@ Five pure TS modules + 2 vitest test files. All persistence is **`localStorage`*
 3. **Consolidate settings keys** under one `settings` object or migrate 1:1 to a `user_settings` Supabase table.
 4. **Strip `userId='default-user'` defaults** from dailyJournalService once auth is wired.
 5. **Add tests** for the context↔service key contract to prevent future drift.
+
+---
+
+## Related
+
+- Callers: [[contexts]] · [[components]] · [[hooks]]
+- Contracts: [[types]] · [[supabase-tables]]
+- Backend: [[api-endpoints]] · [[shared-packages]]
+- Migration: [[adr-010-dual-mode-migration]]

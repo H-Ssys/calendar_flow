@@ -57,3 +57,12 @@ All 11 registry files now populated:
 - No broken wikilinks detected
 - No orphan notes in docs/vault/
 - Workflow state file current and valid
+
+---
+
+## Related
+
+- Registry: [[components]] · [[contexts]] · [[hooks]] · [[services]] · [[types]] · [[utilities]] · [[config]] · [[patterns]] · [[api-endpoints]] · [[shared-packages]] · [[supabase-tables]]
+- Architecture: [[codebase-scan]] · [[dependency-map]] · [[dead-code-candidates]] · [[oversized-files]]
+- Design: [[system]]
+- Sync: [[workflow-state]]

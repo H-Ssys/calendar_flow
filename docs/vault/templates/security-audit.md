@@ -33,3 +33,7 @@ tool_owner: claude-code
 
 ## Required Fixes (blocks deploy if CRITICAL/HIGH)
 - 
+
+## Related
+- [[supabase-tables]]
+- [[api-endpoints]]

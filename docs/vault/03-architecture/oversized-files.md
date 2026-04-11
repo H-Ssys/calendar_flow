@@ -7,7 +7,7 @@ scan: step-8
 
 # Oversized Files (>500 lines)
 
-7 files exceed the 500-line threshold.
+7 files exceed the 500-line threshold. Entries here are tracked in [[components]] and [[contexts]] registries.
 
 | # | File | Lines | Category |
 |---|------|-------|----------|
@@ -97,3 +97,10 @@ Just over threshold. Task detail panel with subtasks, activity, tags.
 | MEDIUM | AddEventForm (652) | Split when modifying |
 | LOW | EventPage (558), TaskDetail (502) | Split when modifying |
 | SKIP | database.types.ts (auto-gen), sidebar.tsx (library) | Do not touch |
+
+---
+
+## Related
+
+- Registries: [[components]] · [[contexts]]
+- Architecture: [[dead-code-candidates]] · [[codebase-scan]]

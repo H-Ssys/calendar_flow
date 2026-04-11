@@ -17,3 +17,7 @@ date_shipped: {{date}}
 | Skills triggered |  |
 | Time to ship (wall clock) |  |
 | Workflow compliance |  |
+
+## Related
+- [[cost-log]]
+- [[workflow-state]]

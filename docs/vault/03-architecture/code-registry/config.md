@@ -8,7 +8,7 @@ scope: project root
 
 # Config Files Registry
 
-Catalog of tooling, build, and workspace config at `/home/flow/calendar-main/`.
+Catalog of tooling, build, and workspace config at `/home/flow/calendar-main/`. Wires [[shared-packages]] into the frontend [[components]] build.
 
 > **🚨 Build tooling is currently broken.** The recovered frontend ships non-standard file names (`vite.frontend.config.ts`, `tailwind.frontend.config.ts`, `index.frontend.html`) and is **missing `tsconfig.json` entirely**. `components.json` points shadcn at `tailwind.config.ts` which does not exist. `pnpm-workspace.yaml` declares a package `calendar-main` which **is the current directory itself** — the workspace layout is inside-out. Expect `pnpm install` / `pnpm dev` to fail without fixes.
 
@@ -211,3 +211,12 @@ Each sub-package is expected to have its own `package.json` / `tsconfig.json` �
 6. **Align Vite port 8080 vs Playwright 5173** — pick one.
 7. **Add `postcss.config.js`** with `tailwindcss` + `autoprefixer`.
 8. **Add `eslint.config.js`** or drop the `lint` script.
+
+---
+
+## Related
+
+- Packages: [[shared-packages]]
+- Frontend: [[components]] · [[contexts]]
+- Backend: [[api-endpoints]]
+- Cleanup: [[dead-code-candidates]]

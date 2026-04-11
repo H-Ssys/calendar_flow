@@ -7,7 +7,7 @@ scan: step-6
 
 # Shared Packages Registry
 
-Three workspace packages under `packages/` — the v2 data layer intended to replace v1 localStorage.
+Three workspace packages under `packages/` — the v2 data layer intended to replace v1 localStorage. Typed against [[supabase-tables]]; target clients are [[contexts]]; v1 equivalents in [[types]]; consumed from [[config]].
 
 ---
 
@@ -195,3 +195,12 @@ Three workspace packages under `packages/` — the v2 data layer intended to rep
 3. **Use `id_mapping` table** (already in v2 schema) to track v1 localStorage IDs → v2 Supabase UUIDs during migration
 4. **Phase out contexts gradually** — wire new pages to v2 hooks, keep v1 contexts for backward compat until all pages migrated
 5. **Settings migration** — consolidate CalendarContext's 8+ localStorage keys into `profiles` table
+
+---
+
+## Related
+
+- Contracts: [[types]] · [[supabase-tables]]
+- Targets: [[contexts]] · [[services]] · [[hooks]]
+- Build: [[config]]
+- Migration: [[adr-010-dual-mode-migration]]

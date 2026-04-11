@@ -7,7 +7,7 @@ m0-cleanup: 2026-04-11
 
 # Dead Code Candidates
 
-25 items across 5 categories. Estimated removable: ~3,500 lines.
+25 items across 5 categories. Estimated removable: ~3,500 lines. See [[components]], [[services]], and [[config]] for the registry entries of files flagged here.
 **M0 cleanup (2026-04-11)**: Items 1–5 deleted, items 17–18 already absent. ~926 lines removed.
 
 ---
@@ -95,3 +95,10 @@ Root `/` has numbered folders and templates duplicating `docs/vault/`.
 5. **Delete 4 unimported settings components** — 320 lines
 6. **Clean up duplicate vault roots** — structural
 7. **SiYuan cleanup** — defer until TipTap migration
+
+---
+
+## Related
+
+- Registries: [[components]] · [[services]] · [[config]] · [[api-endpoints]]
+- Architecture: [[oversized-files]] · [[codebase-scan]] · [[vault-health]]

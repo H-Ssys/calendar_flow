@@ -13,7 +13,7 @@ ui_primitives: 49
 
 **Scope:** `src/components/`
 **Business components:** 58 files / ~11,353 lines
-**State layer:** All business components consume React contexts (`CalendarContext`, `TaskContext`, `NoteContext`) — none hit Supabase directly except `GeneralSettings` (via `dataService`). This is a **v1 (context + localStorage)** architecture; migration to Supabase is a Phase 4+ concern.
+**State layer:** All business components consume React [[contexts]] (`CalendarContext`, `TaskContext`, `NoteContext`) — none hit Supabase directly except `GeneralSettings` (via [[services|dataService]]). This is a **v1 (context + localStorage)** architecture; migration to Supabase is a Phase 4+ concern. See [[hooks]] for shared helper logic and [[types]] for contracts.
 **Oversized (>500 lines):** `DailyJournalView` (1324), `AddEventForm` (652), `EventPage` (558), `TaskDetail` (502).
 **Direct `localStorage` touches:** `CalendarSettings`, `ConferencingSettings`, `RoomsSettings`, `BillingSettings`, `GeneralSettings`, `DailyJournalView` (rest persist via contexts which themselves write localStorage).
 
@@ -557,3 +557,12 @@ Route configuration lives in `src/App.tsx`. All pages share the same provider tr
 - **Status**: **Not referenced by `App.tsx`** — the `/tasks` route is wired to `EventTask.tsx` instead. This file is orphaned.
 - **Additional bug**: Its `addTask()` call passes `{ title, description, status, priority, linkedEventIds, tags, category, color, subtasks }` — **missing `linkedTaskIds`, `activityLog`, `actualResult`** required by the `Task` interface. Would fail TS strict build if re-enabled.
 - **Action**: Delete `src/pages/Tasks.tsx` — added to dead-code candidates.
+
+---
+
+## Related
+
+- State layer: [[contexts]] · [[hooks]] · [[services]]
+- Contracts: [[types]] · [[supabase-tables]]
+- Cross-cutting: [[patterns]] · [[dependency-map]]
+- Cleanup: [[dead-code-candidates]] · [[oversized-files]]

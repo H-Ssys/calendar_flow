@@ -18,3 +18,7 @@ created: {{date}}
 
 ## Patterns to Follow (from registry)
 - 
+
+## Related
+- [[components]] · [[hooks]] · [[services]]
+- [[patterns]]

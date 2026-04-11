@@ -269,3 +269,12 @@ Legacy sync functions (`exportAllDataJSON`, `importAllData`, `resetAllData`) unt
 - **P1** — Fix non-UUID v1 IDs across modules (notes, tasks, events) for Supabase compatibility
 - **P2** — Event audit logs: create event_audit_log table or skip entirely
 - **P3** — Cross-module linking tables (event_notes, contact_notes, event_tasks) — currently JSONB metadata
+
+---
+
+## Related
+
+- Scan: [[codebase-scan]] · [[vault-health]]
+- ADR: [[adr-010-dual-mode-migration]]
+- Cost: [[cost-log]]
+- Registries: [[contexts]] · [[services]] · [[supabase-tables]]

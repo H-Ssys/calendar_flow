@@ -10,7 +10,7 @@ date: 2026-04-11
 
 ## Context
 
-Flow currently stores all data in localStorage with no authentication. The target state is Supabase PostgreSQL with RLS policies enforcing per-user isolation. We need a migration path that doesn't break the existing app while incrementally wiring up Supabase.
+Flow currently stores all data in localStorage with no authentication. The target state is [[supabase-tables|Supabase PostgreSQL]] with RLS policies enforcing per-user isolation. We need a migration path that doesn't break the existing app while incrementally wiring up Supabase. See [[contexts]] for current v1 state owners and [[services]] for the persistence layer.
 
 The `packages/supabase-client/` package already provides `useAuth`, `supabase` client, and `useRealtimeQuery` — but nothing in `src/` consumes them yet.
 
@@ -48,3 +48,8 @@ When contexts migrate from localStorage to Supabase:
 - The anon key is safe in `VITE_` prefix — it's public by Supabase design and gated by RLS
 - Data contexts (Calendar, Task, Note) are unchanged — they still use localStorage
 - The `AuthProvider` must be inside `BrowserRouter` (for `Navigate`) but outside the data providers (which only mount for authenticated users)
+
+## Related
+
+- [[contexts]] · [[services]] · [[supabase-tables]] · [[shared-packages]]
+- [[workflow-state]] · [[codebase-scan]]

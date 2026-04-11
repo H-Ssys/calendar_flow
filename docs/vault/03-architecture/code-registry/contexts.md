@@ -9,7 +9,7 @@ total_files: 3
 
 # Contexts Registry
 
-Three React contexts own **all v1 state** for Flow. Every business component routes through these rather than hitting storage/services directly. All persistence is `localStorage` — each key below is a migration target for Phase 4+ Supabase tables.
+Three React contexts own **all v1 state** for Flow. Every business [[components|component]] routes through these rather than hitting storage/[[services]] directly. All persistence is `localStorage` — each key below is a migration target for Phase 4+ [[supabase-tables|Supabase tables]]. See [[types]] for the shape contracts and [[hooks]] for derived read helpers.
 
 > **⚠ Storage key drift:** `NoteContext`/`noteService` persist to `ofative-notes` and `TaskContext`/`taskService` persist to `ofative-tasks`, but `dataService.ts` reads/writes `notes` and `tasks`. **Export/import and reset currently miss notes and tasks entirely.** Flag for Phase 4 fix.
 
@@ -235,3 +235,13 @@ todayTasks: Task[]               // derived
 - **Plus settings-stub keys** (from scan step 2): `settings-calendar-connected`, `settings-conferencing-connected`, `settings-rooms-connected`
 - **Migration blocker:** Key-naming drift between contexts (`ofative-*`) and `dataService` (`tasks`/`notes`). Fix before Phase 4 Supabase migration to avoid silent data loss in export/import.
 - **Refactor candidate:** `CalendarContext.tsx` (640 lines) — split into provider / types / persistence / mocks.
+
+---
+
+## Related
+
+- Consumers: [[components]] · [[hooks]]
+- Persistence: [[services]] · [[supabase-tables]]
+- Contracts: [[types]] · [[shared-packages]]
+- Patterns: [[patterns]] · [[dependency-map]]
+- ADR: [[adr-010-dual-mode-migration]]

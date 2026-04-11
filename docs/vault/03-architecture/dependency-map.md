@@ -6,6 +6,8 @@ scan: step-8
 
 # Dependency Map
 
+Cross-registry edges between [[components]], [[contexts]], [[hooks]], [[services]], and [[types]]. See also [[patterns]].
+
 ## Context Consumer Graph
 
 ### CalendarContext (45 consumers)
@@ -124,3 +126,11 @@ packages/ui
 ```
 
 All 3 packages ready but disconnected from the running application.
+
+---
+
+## Related
+
+- Registries: [[components]] · [[contexts]] · [[hooks]] · [[services]] · [[types]] · [[shared-packages]]
+- Overview: [[codebase-scan]] · [[patterns]]
+- Cleanup: [[dead-code-candidates]] · [[oversized-files]]

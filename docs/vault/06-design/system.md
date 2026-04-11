@@ -190,3 +190,11 @@ export default { presets: [ofativePreset], content: ['./src/**/*.tsx'] }
 ```
 
 All color pairs meeting WCAG 2.1 AA (contrast >= 4.5:1). Color alone is never sufficient for meaning — always pair with text label.
+
+---
+
+## Related
+
+- Consumers: [[components]] · [[shared-packages]]
+- Build: [[config]]
+- Health: [[vault-health]]

@@ -7,7 +7,7 @@ scan: step-7
 
 # Supabase Tables Registry
 
-8 migrations, 26 public tables, 30 RLS test files, 37 indexes, 5 functions, 13 triggers.
+8 migrations, 26 public tables, 30 RLS test files, 37 indexes, 5 functions, 13 triggers. Read by [[api-endpoints]] and (post-migration) [[contexts]]; typed via [[shared-packages]] and [[types]].
 
 ---
 
@@ -323,3 +323,11 @@ All 5 tables: composite PK, CASCADE on both FKs, RLS requires access to BOTH lin
 | focus_sessions | Pomodoro timer not wired to Supabase |
 | ai_cache | AI chat not implemented |
 | id_mapping | Migration tool not built |
+
+---
+
+## Related
+
+- Clients: [[contexts]] · [[services]] · [[api-endpoints]]
+- Contracts: [[types]] · [[shared-packages]]
+- Migration: [[adr-010-dual-mode-migration]]
