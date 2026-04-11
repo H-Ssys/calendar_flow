@@ -1,10 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useAuthContext } from './AuthContext';
 import * as eventSupabaseService from '@/services/supabase/eventSupabaseService';
+import * as settingsService from '@/services/supabase/settingsSupabaseService';
+import type { SettingsBlob } from '@/services/supabase/settingsSupabaseService';
 import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/eventTypeMapper';
 
 // ── Feature flag: 'true' → Supabase, anything else → localStorage ──
 const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
+
+// ── Debounce helper for settings saves ─────────────────────────────
+function useDebouncedCallback<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
+    const timer = useRef<ReturnType<typeof setTimeout>>();
+    useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+    return useCallback((...args: unknown[]) => {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => fn(...args), delay);
+    }, [fn, delay]) as unknown as T;
+}
 
 export interface Event {
     id: string;
@@ -435,7 +447,15 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [currentDate, setCurrentDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategories, setActiveCategories] = useState<string[]>(['Work Plan']);
+
+    // Settings State (declared early so Supabase settings load effect can reference setTheme)
+    const [theme, setTheme] = useState<Theme>('light');
+    const [timeFormat, setTimeFormat] = useState<TimeFormat>('12h');
+    const [weekStart, setWeekStart] = useState<WeekStart>('monday');
+    const [showDeclinedEvents, setShowDeclinedEvents] = useState(false);
+
     const [categories, setCategories] = useState<Category[]>(() => {
+        if (USE_SUPABASE) return DEFAULT_CATEGORIES; // hydrated async
         try {
             const stored = localStorage.getItem('settings-categories');
             if (stored) return JSON.parse(stored);
@@ -443,11 +463,12 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         return DEFAULT_CATEGORIES;
     });
 
-    // Per-View Time Configuration with localStorage persistence
+    // Per-View Time Configuration
     const DAILY_DEFAULTS: ViewTimeConfig = { startHour: 6, endHour: 22, hourInterval: 2 };
     const WEEKLY_DEFAULTS: ViewTimeConfig = { startHour: 6, endHour: 22, hourInterval: 2 };
 
     const [dailyTimeConfig, setDailyTimeConfig] = useState<ViewTimeConfig>(() => {
+        if (USE_SUPABASE) return DAILY_DEFAULTS;
         try {
             const stored = localStorage.getItem('settings-daily-time-config');
             if (stored) return { ...DAILY_DEFAULTS, ...JSON.parse(stored) };
@@ -456,6 +477,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const [weeklyTimeConfig, setWeeklyTimeConfig] = useState<ViewTimeConfig>(() => {
+        if (USE_SUPABASE) return WEEKLY_DEFAULTS;
         try {
             const stored = localStorage.getItem('settings-weekly-time-config');
             if (stored) return { ...WEEKLY_DEFAULTS, ...JSON.parse(stored) };
@@ -464,6 +486,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const [monthlyViewConfig, setMonthlyViewConfig] = useState<MonthlyViewConfig>(() => {
+        if (USE_SUPABASE) return { rowHighlightColor: '#EFF6FF' };
         try {
             const stored = localStorage.getItem('settings-monthly-view-config');
             if (stored) return JSON.parse(stored);
@@ -472,6 +495,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const [yearlyViewConfig, setYearlyViewConfig] = useState<YearlyViewConfig>(() => {
+        if (USE_SUPABASE) return { monthHighlightColor: '#DBEAFE' };
         try {
             const stored = localStorage.getItem('settings-yearly-view-config');
             if (stored) return JSON.parse(stored);
@@ -479,14 +503,8 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         return { monthHighlightColor: '#DBEAFE' }; // blue-100
     });
 
-    // Persist per-view configs
-    useEffect(() => { localStorage.setItem('settings-daily-time-config', JSON.stringify(dailyTimeConfig)); }, [dailyTimeConfig]);
-    useEffect(() => { localStorage.setItem('settings-weekly-time-config', JSON.stringify(weeklyTimeConfig)); }, [weeklyTimeConfig]);
-    useEffect(() => { localStorage.setItem('settings-monthly-view-config', JSON.stringify(monthlyViewConfig)); }, [monthlyViewConfig]);
-    useEffect(() => { localStorage.setItem('settings-yearly-view-config', JSON.stringify(yearlyViewConfig)); }, [yearlyViewConfig]);
-
-    // Phase 2: Actionable Settings with localStorage persistence
     const [menuBarConfig, setMenuBarConfig] = useState<MenuBarConfig>(() => {
+        if (USE_SUPABASE) return { enabled: false, eventPeriod: 'today' };
         try {
             const stored = localStorage.getItem('settings-menu-bar');
             if (stored) return JSON.parse(stored);
@@ -495,6 +513,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const [profileConfig, setProfileConfig] = useState<ProfileConfig>(() => {
+        if (USE_SUPABASE) return { firstName: '', lastName: '', bio: '', language: 'en', timezone: 'UTC' };
         try {
             const stored = localStorage.getItem('settings-profile');
             if (stored) return JSON.parse(stored);
@@ -503,6 +522,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const [emailNotificationConfig, setEmailNotificationConfig] = useState<EmailNotificationConfig>(() => {
+        if (USE_SUPABASE) return { newInvitations: true, eventUpdates: true, eventCancellations: true, dailyAgenda: false, newSignIns: true, securityAlerts: true };
         try {
             const stored = localStorage.getItem('settings-email-notifications');
             if (stored) return JSON.parse(stored);
@@ -510,20 +530,101 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         return { newInvitations: true, eventUpdates: true, eventCancellations: true, dailyAgenda: false, newSignIns: true, securityAlerts: true };
     });
 
-    useEffect(() => { localStorage.setItem('settings-menu-bar', JSON.stringify(menuBarConfig)); }, [menuBarConfig]);
-    useEffect(() => { localStorage.setItem('settings-profile', JSON.stringify(profileConfig)); }, [profileConfig]);
-    useEffect(() => { localStorage.setItem('settings-email-notifications', JSON.stringify(emailNotificationConfig)); }, [emailNotificationConfig]);
+    // Track whether Supabase settings have been loaded (prevents save-on-mount with defaults)
+    const settingsLoaded = useRef(false);
+
+    // ── Supabase mode: load settings on mount ───────────────────────
+    useEffect(() => {
+        if (!USE_SUPABASE || !userId) return;
+        settingsService.fetchSettings(userId).then(({ settings: s, profile: p }) => {
+            if (s.categories && Array.isArray(s.categories)) setCategories(s.categories as Category[]);
+            if (s.dailyTimeConfig) setDailyTimeConfig({ ...DAILY_DEFAULTS, ...s.dailyTimeConfig });
+            if (s.weeklyTimeConfig) setWeeklyTimeConfig({ ...WEEKLY_DEFAULTS, ...s.weeklyTimeConfig });
+            if (s.monthlyViewConfig) setMonthlyViewConfig(s.monthlyViewConfig as MonthlyViewConfig);
+            if (s.yearlyViewConfig) setYearlyViewConfig(s.yearlyViewConfig as YearlyViewConfig);
+            if (s.menuBar) setMenuBarConfig(s.menuBar as MenuBarConfig);
+            if (s.emailNotifications) setEmailNotificationConfig(s.emailNotifications as EmailNotificationConfig);
+            // Profile columns → profileConfig
+            setProfileConfig({
+                firstName: p.display_name?.split(' ')[0] ?? '',
+                lastName: p.display_name?.split(' ').slice(1).join(' ') ?? '',
+                bio: '',
+                language: p.language ?? 'en',
+                timezone: p.timezone ?? 'UTC',
+            });
+            if (p.theme) setTheme(p.theme as Theme);
+            settingsLoaded.current = true;
+        }).catch((err) => {
+            console.error('[CalendarContext] Failed to load settings from Supabase:', err);
+            settingsLoaded.current = true; // proceed with defaults
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userId]);
+
+    // ── Debounced Supabase settings save ────────────────────────────
+    const saveSettingsToSupabase = useCallback(() => {
+        if (!USE_SUPABASE || !userId || !settingsLoaded.current) return;
+        const blob: SettingsBlob = {
+            categories,
+            dailyTimeConfig,
+            weeklyTimeConfig,
+            monthlyViewConfig,
+            yearlyViewConfig,
+            menuBar: menuBarConfig,
+            emailNotifications: emailNotificationConfig,
+        };
+        settingsService.updateSettings(userId, blob).catch((err) => {
+            console.error('[CalendarContext] Failed to save settings to Supabase:', err);
+        });
+    }, [userId, categories, dailyTimeConfig, weeklyTimeConfig, monthlyViewConfig, yearlyViewConfig, menuBarConfig, emailNotificationConfig]);
+
+    const debouncedSaveSettings = useDebouncedCallback(saveSettingsToSupabase, 300);
+
+    // Trigger debounced save whenever any setting changes (Supabase mode only)
+    useEffect(() => {
+        if (!USE_SUPABASE || !settingsLoaded.current) return;
+        debouncedSaveSettings();
+    }, [debouncedSaveSettings]);
+
+    // ── Debounced Supabase profile columns save ─────────────────────
+    const saveProfileToSupabase = useCallback(() => {
+        if (!USE_SUPABASE || !userId || !settingsLoaded.current) return;
+        const displayName = [profileConfig.firstName, profileConfig.lastName].filter(Boolean).join(' ');
+        settingsService.updateProfileColumns(userId, {
+            display_name: displayName || null,
+            timezone: profileConfig.timezone,
+            language: profileConfig.language,
+            theme,
+        }).catch((err) => {
+            console.error('[CalendarContext] Failed to save profile to Supabase:', err);
+        });
+    }, [userId, profileConfig, theme]);
+
+    const debouncedSaveProfile = useDebouncedCallback(saveProfileToSupabase, 300);
+
+    useEffect(() => {
+        if (!USE_SUPABASE || !settingsLoaded.current) return;
+        debouncedSaveProfile();
+    }, [debouncedSaveProfile]);
+
+    // ── localStorage mode: persist settings ─────────────────────────
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-daily-time-config', JSON.stringify(dailyTimeConfig)); }, [dailyTimeConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-weekly-time-config', JSON.stringify(weeklyTimeConfig)); }, [weeklyTimeConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-monthly-view-config', JSON.stringify(monthlyViewConfig)); }, [monthlyViewConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-yearly-view-config', JSON.stringify(yearlyViewConfig)); }, [yearlyViewConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-menu-bar', JSON.stringify(menuBarConfig)); }, [menuBarConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-profile', JSON.stringify(profileConfig)); }, [profileConfig]);
+    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-email-notifications', JSON.stringify(emailNotificationConfig)); }, [emailNotificationConfig]);
 
     // Legacy aliases — timeConfig points to weeklyTimeConfig for backward compatibility
     const timeConfig = weeklyTimeConfig;
     const setTimeConfig = setWeeklyTimeConfig;
 
     const addCategory = (category: Category) => {
-        // Only persist settings-level categories, not ad-hoc from AddEvent
         const updated = [...categories, category];
         setCategories(updated);
-        localStorage.setItem('settings-categories', JSON.stringify(updated));
-        // Auto-activate the new category
+        // In Supabase mode, categories save is handled by the debounced settings effect
+        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
         if (!activeCategories.includes(category.name)) {
             setActiveCategories([...activeCategories, category.name]);
         }
@@ -532,8 +633,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const updateCategory = (name: string, updates: Partial<Category>) => {
         const updated = categories.map(c => c.name === name ? { ...c, ...updates } : c);
         setCategories(updated);
-        localStorage.setItem('settings-categories', JSON.stringify(updated));
-        // Also update event colors if the category color changed
+        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
         if (updates.color) {
             setEvents(prev => prev.map(e => e.category === name ? { ...e, color: updates.color! } : e));
         }
@@ -542,10 +642,8 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const deleteCategory = (name: string) => {
         const updated = categories.filter(c => c.name !== name);
         setCategories(updated);
-        localStorage.setItem('settings-categories', JSON.stringify(updated));
-        // Remove from active categories
+        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
         setActiveCategories(prev => prev.filter(c => c !== name));
-        // Clear category from events but preserve their color
         setEvents(prev => prev.map(e => e.category === name ? { ...e, category: undefined } : e));
     };
 
@@ -625,12 +723,6 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
             setActiveCategories([...activeCategories, category]);
         }
     };
-
-    // Settings State
-    const [theme, setTheme] = useState<Theme>('light');
-    const [timeFormat, setTimeFormat] = useState<TimeFormat>('12h');
-    const [weekStart, setWeekStart] = useState<WeekStart>('monday');
-    const [showDeclinedEvents, setShowDeclinedEvents] = useState(false);
 
     // Theme Effect
     React.useEffect(() => {

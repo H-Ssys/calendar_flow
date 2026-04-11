@@ -1,21 +1,44 @@
 ---
 type: workflow-state
-current_workflow: m2a-events-migration
+current_workflow: m2b-settings-migration
 current_step: 1
-feature_name: events-migration
+feature_name: settings-migration
 status: complete
-last_updated: 2026-04-11T20:00:00Z
-last_step_summary: "M2a Events Migration complete. CalendarContext dual-mode: VITE_USE_SUPABASE='true' → Supabase CRUD + realtime, otherwise localStorage (unchanged). eventSupabaseService.ts provides fetchEvents/createEvent/updateEvent/deleteEvent/subscribeToEvents. eventTypeMapper.ts maps v1 Event ↔ v2 EventRow. Optimistic updates with rollback on error. Settings/categories/logs remain localStorage (M2b scope)."
+last_updated: 2026-04-11T21:00:00Z
+last_step_summary: "M2b Settings Migration complete. 8 CalendarContext localStorage keys migrated to Supabase profiles.settings JSONB (7 keys) + profiles columns (display_name, timezone, language, theme). Migration 009 adds settings JSONB column. Debounced 300ms writes prevent rapid saves. Event-logs skipped (P2 — localStorage only). No settings UI components modified."
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m2a-events-migration
-- **Step**: M2a — Complete
-- **Feature**: Calendar events CRUD migration to Supabase
+- **Workflow**: m2b-settings-migration
+- **Step**: M2b — Complete
+- **Feature**: CalendarContext settings migration to Supabase
 - **Status**: complete
+
+## M2b Settings Migration (2026-04-11)
+| Task | Status | Summary |
+|------|--------|---------|
+| Migration 009 | done | ALTER TABLE profiles ADD COLUMN settings JSONB DEFAULT '{}' |
+| settingsSupabaseService.ts | done | fetchSettings, updateSettings, updateProfileColumns |
+| CalendarContext.tsx | done | Dual-mode settings: load from Supabase on mount, debounced 300ms save |
+| Category CRUD | done | localStorage writes guarded with !USE_SUPABASE |
+| Event-logs | skipped (P2) | Remain localStorage-only — not user-facing, grow unbounded |
+
+### Settings Key Mapping
+| localStorage Key | Supabase Location | Notes |
+|-----------------|-------------------|-------|
+| `settings-categories` | profiles.settings.categories | Category[] |
+| `settings-daily-time-config` | profiles.settings.dailyTimeConfig | ViewTimeConfig |
+| `settings-weekly-time-config` | profiles.settings.weeklyTimeConfig | ViewTimeConfig |
+| `settings-monthly-view-config` | profiles.settings.monthlyViewConfig | MonthlyViewConfig |
+| `settings-yearly-view-config` | profiles.settings.yearlyViewConfig | YearlyViewConfig |
+| `settings-menu-bar` | profiles.settings.menuBar | MenuBarConfig |
+| `settings-email-notifications` | profiles.settings.emailNotifications | EmailNotificationConfig |
+| `settings-profile` | profiles.display_name + timezone + language | First-class columns, not JSONB |
+| (theme state) | profiles.theme | First-class column |
+| `event-logs` | **NOT MIGRATED** (P2) | Stays localStorage |
 
 ## M2a Events Migration (2026-04-11)
 | Task | Status | Summary |
@@ -26,59 +49,38 @@ retry_count: 0
 | .env.example | done | Added VITE_USE_SUPABASE=false |
 | Optimistic updates | done | All CRUD ops update local state immediately, rollback on Supabase error |
 | Realtime subscription | done | subscribeToEvents refetches on any postgres_changes event |
-| Settings/categories/logs | unchanged | Still localStorage — M2b scope |
+| Settings/categories/logs | done (M2b) | Migrated in M2b |
 
-### Type Mismatches Found (v1 Event ↔ v2 events table)
+### Type Mismatches (v1 Event ↔ v2 events table)
 | v1 Field | v2 Column | Status |
 |----------|-----------|--------|
-| emoji: string | — | **DROPPED** — no v2 column |
-| category?: string | — | **DROPPED** — no v2 column |
-| participants?: array | event_participants table | **NOT MAPPED** — separate table, M2b+ |
-| videoCallLink?: string | — | **DROPPED** — no v2 column |
-| — | user_id | Set from auth context |
-| — | team_id | Defaults to null (personal events) |
-| — | shared_calendar_id | Defaults to null |
-| — | created_by | Not set (defaults in DB) |
-| — | visibility | Defaults to 'private' |
-| startTime: Date | start_time: string | Date ↔ ISO string conversion |
-| endTime: Date | end_time: string | Date ↔ ISO string conversion |
-| isAllDay: boolean | all_day: boolean | Field rename only |
-| recurrence?: string | recurrence_rule: string | Field rename only |
+| emoji: string | — | DROPPED — no v2 column |
+| category?: string | — | DROPPED — no v2 column |
+| participants?: array | event_participants table | NOT MAPPED — separate table |
+| videoCallLink?: string | — | DROPPED — no v2 column |
 
 ## M1 Auth Layer (2026-04-11)
 | Task | Status | Summary |
 |------|--------|---------|
-| AuthContext.tsx | done | Wraps @ofative/supabase-client useAuth, exposes isAuthenticated + user/session/signIn/signOut/signUp |
-| Login.tsx | done | Email + password form, error handling, redirect to / on success |
-| Signup.tsx | done | Email + password + confirm, validation, email confirmation flow |
-| App.tsx | done | AuthProvider inside BrowserRouter, ProtectedLayout with Outlet, PublicRoute for login/signup |
-| .env.example | done | VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY placeholders |
+| AuthContext.tsx | done | Wraps @ofative/supabase-client useAuth |
+| Login.tsx | done | Email + password form |
+| Signup.tsx | done | Email + password + confirm |
+| App.tsx | done | AuthProvider + ProtectedLayout + PublicRoute |
 | ADR-010 | done | Documents auth-first migration strategy |
-| Data contexts | unchanged | CalendarContext, TaskContext, NoteContext still use localStorage |
 
 ## M0 Cleanup (2026-04-11)
 | Task | Status | Summary |
 |------|--------|---------|
-| Fix storage-key drift | done | dataService.ts: `tasks`->`ofative-tasks`, `notes`->`ofative-notes` |
+| Fix storage-key drift | done | dataService.ts: tasks→ofative-tasks, notes→ofative-notes |
 | Delete backend/ | done | ~700 lines removed |
 | Delete dead files | done | temp_event_helper.ts, *.frontend.* configs |
-| Delete Windows leftovers | n/a | Already absent |
-| Update docs | done | dead-code-candidates.md + workflow-state.md |
 
 ## Step History (prior: standalone-scan)
 | Step | Agent | Status | Summary |
 |------|-------|--------|---------|
-| 0 | -- | done | System initialized |
-| 1 | Codebase Scanner | done | Project structure map (2026-04-09) |
-| 2 | Codebase Scanner | done | Frontend components registry -- 69 components cataloged |
-| 3 | Codebase Scanner | done | Contexts (3), hooks (9), services (5) registered |
-| 4 | Codebase Scanner | done | Types (3 files, 78 interfaces), utilities, pages, config |
-| 5 | Codebase Scanner | done | Backend: flow-api canonical, backend/ dead, 5 active endpoints |
-| 6 | Codebase Scanner | done | Packages: 26-table types, 3 v2 hooks, design tokens, v1/v2 gap |
-| 7 | Codebase Scanner | done | Database: 8 migrations, 26 tables, 100% RLS coverage, 2 drift |
-| 8 | Codebase Scanner | done | Patterns (10), deps, dead code (25), oversized (7), vault health |
+| 0–8 | Codebase Scanner | done | Full scan (299 files, 25 dead code items) |
 
-## Scan Totals
-- **Files scanned**: 146 (src) + 69 (flow-api) + 25 (backend) + 19 (packages) + 40 (supabase) = 299
-- **Dead code identified**: 25 items -> 20 remaining after M0 (~2,574 lines)
-- **Next recommended action**: M2b — Settings migration (localStorage keys → profiles.settings JSONB) OR M3 — Wire TaskContext to Supabase
+## Next Recommended Actions
+- **M3** — Wire TaskContext to Supabase (tasks CRUD)
+- **M4** — Wire NoteContext to Supabase (notes CRUD)
+- **P2** — Event audit logs: create event_audit_log table or skip entirely
