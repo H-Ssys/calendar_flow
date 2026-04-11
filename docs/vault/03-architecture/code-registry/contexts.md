@@ -87,8 +87,17 @@ eventLogs: EventLog[]                 // audit trail
 - INITIAL_EVENTS mock data seeded when no storage is present (~500 lines of lines 215–349).
 - `PASTEL_COLORS` (9 entries) is the canonical category color palette.
 
+### Supabase Dual-Mode (M2a, 2026-04-11)
+- **Feature flag**: `VITE_USE_SUPABASE === 'true'` → Supabase mode, otherwise localStorage (default)
+- **Supabase service**: `src/services/supabase/eventSupabaseService.ts` — fetchEvents, createEvent, updateEvent, deleteEvent, subscribeToEvents
+- **Type mapper**: `src/utils/eventTypeMapper.ts` — mapV1ToV2, mapV2ToV1, mapV1UpdateToV2
+- **CRUD pattern**: Optimistic local update → async Supabase call → rollback on error
+- **Realtime**: subscribeToEvents refetches full event list on any postgres_changes event
+- **Scope**: Events CRUD only. Settings, categories, event logs remain localStorage.
+- **Type gaps**: emoji, category, participants, videoCallLink have no v2 column — dropped on Supabase write, defaulted on read
+
 ### ⚠ Issues
-- **640 lines** — approaching refactor threshold. Split: types file, provider file, persistence hook, mock data.
+- **~717 lines** — past refactor threshold. Split: types file, provider file, persistence hook, mock data.
 - **10 separate localStorage keys** — schema drift risk. Centralize key constants.
 - Mixed concerns: events CRUD, categories CRUD, settings slices, event logs all in one file.
 - `timeConfig` is a legacy alias kept for backward compat — remove after consumers migrate to `weeklyTimeConfig`.

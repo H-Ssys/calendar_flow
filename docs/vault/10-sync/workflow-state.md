@@ -1,21 +1,49 @@
 ---
 type: workflow-state
-current_workflow: m1-auth-layer
+current_workflow: m2a-events-migration
 current_step: 1
-feature_name: auth-layer
+feature_name: events-migration
 status: complete
-last_updated: 2026-04-11T19:00:00Z
-last_step_summary: "M1 Auth Layer complete. AuthProvider wraps app, ProtectedLayout gates all app routes, Login/Signup pages created, user.id available via useAuthContext(). No data logic modified — localStorage persistence unchanged."
+last_updated: 2026-04-11T20:00:00Z
+last_step_summary: "M2a Events Migration complete. CalendarContext dual-mode: VITE_USE_SUPABASE='true' → Supabase CRUD + realtime, otherwise localStorage (unchanged). eventSupabaseService.ts provides fetchEvents/createEvent/updateEvent/deleteEvent/subscribeToEvents. eventTypeMapper.ts maps v1 Event ↔ v2 EventRow. Optimistic updates with rollback on error. Settings/categories/logs remain localStorage (M2b scope)."
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m1-auth-layer
-- **Step**: M1 — Complete
-- **Feature**: Supabase authentication shell
+- **Workflow**: m2a-events-migration
+- **Step**: M2a — Complete
+- **Feature**: Calendar events CRUD migration to Supabase
 - **Status**: complete
+
+## M2a Events Migration (2026-04-11)
+| Task | Status | Summary |
+|------|--------|---------|
+| eventTypeMapper.ts | done | v1 Event ↔ v2 EventRow mapping with mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 |
+| eventSupabaseService.ts | done | fetchEvents, createEvent, updateEvent, deleteEvent, subscribeToEvents |
+| CalendarContext.tsx | done | Dual-mode: USE_SUPABASE flag gates localStorage vs Supabase path |
+| .env.example | done | Added VITE_USE_SUPABASE=false |
+| Optimistic updates | done | All CRUD ops update local state immediately, rollback on Supabase error |
+| Realtime subscription | done | subscribeToEvents refetches on any postgres_changes event |
+| Settings/categories/logs | unchanged | Still localStorage — M2b scope |
+
+### Type Mismatches Found (v1 Event ↔ v2 events table)
+| v1 Field | v2 Column | Status |
+|----------|-----------|--------|
+| emoji: string | — | **DROPPED** — no v2 column |
+| category?: string | — | **DROPPED** — no v2 column |
+| participants?: array | event_participants table | **NOT MAPPED** — separate table, M2b+ |
+| videoCallLink?: string | — | **DROPPED** — no v2 column |
+| — | user_id | Set from auth context |
+| — | team_id | Defaults to null (personal events) |
+| — | shared_calendar_id | Defaults to null |
+| — | created_by | Not set (defaults in DB) |
+| — | visibility | Defaults to 'private' |
+| startTime: Date | start_time: string | Date ↔ ISO string conversion |
+| endTime: Date | end_time: string | Date ↔ ISO string conversion |
+| isAllDay: boolean | all_day: boolean | Field rename only |
+| recurrence?: string | recurrence_rule: string | Field rename only |
 
 ## M1 Auth Layer (2026-04-11)
 | Task | Status | Summary |
@@ -53,4 +81,4 @@ retry_count: 0
 ## Scan Totals
 - **Files scanned**: 146 (src) + 69 (flow-api) + 25 (backend) + 19 (packages) + 40 (supabase) = 299
 - **Dead code identified**: 25 items -> 20 remaining after M0 (~2,574 lines)
-- **Next recommended action**: M2 — Wire CalendarContext to Supabase (events CRUD)
+- **Next recommended action**: M2b — Settings migration (localStorage keys → profiles.settings JSONB) OR M3 — Wire TaskContext to Supabase

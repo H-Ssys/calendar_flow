@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useAuthContext } from './AuthContext';
+import * as eventSupabaseService from '@/services/supabase/eventSupabaseService';
+import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/eventTypeMapper';
+
+// ── Feature flag: 'true' → Supabase, anything else → localStorage ──
+const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
 
 export interface Event {
     id: string;
@@ -350,7 +356,12 @@ const dateReviver = (_key: string, value: unknown) => {
 const STORAGE_KEY = 'calendar-events';
 
 export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const { user } = useAuthContext();
+    const userId = user?.id;
+
+    // ── Events state (dual-mode init) ───────────────────────────────
     const [events, setEvents] = useState<Event[]>(() => {
+        if (USE_SUPABASE) return []; // loaded async via useEffect
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
@@ -361,8 +372,38 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         return INITIAL_EVENTS;
     });
 
-    // Persist events to localStorage
+    // Track whether initial Supabase load is complete to avoid clobbering
+    const supabaseLoaded = useRef(false);
+
+    // ── Supabase mode: fetch events on mount + realtime subscription ─
     useEffect(() => {
+        if (!USE_SUPABASE || !userId) return;
+
+        let cancelled = false;
+
+        eventSupabaseService.fetchEvents(userId).then((rows) => {
+            if (cancelled) return;
+            setEvents(rows.map(mapV2ToV1));
+            supabaseLoaded.current = true;
+        });
+
+        const unsubscribe = eventSupabaseService.subscribeToEvents(userId, () => {
+            // On any realtime change, refetch the full list
+            // This is simple and correct — optimistic updates are a future optimization
+            eventSupabaseService.fetchEvents(userId).then((rows) => {
+                if (!cancelled) setEvents(rows.map(mapV2ToV1));
+            });
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
+    }, [userId]);
+
+    // ── localStorage mode: persist events ────────────────────────────
+    useEffect(() => {
+        if (USE_SUPABASE) return;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
     }, [events]);
     const [currentView, setCurrentView] = useState<ViewType>('weekly');
@@ -383,10 +424,10 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         localStorage.setItem(EVENT_LOGS_KEY, JSON.stringify(eventLogs));
     }, [eventLogs]);
 
-    const addEventLog = (log: Omit<EventLog, 'id' | 'timestamp'>) => {
+    const addEventLog = useCallback((log: Omit<EventLog, 'id' | 'timestamp'>) => {
         const newLog: EventLog = { ...log, id: crypto.randomUUID(), timestamp: new Date() };
         setEventLogs(prev => [newLog, ...prev]);
-    };
+    }, []);
 
     const getEventLogs = (eventId: string) => eventLogs.filter(l => l.eventId === eventId);
     const clearEventLogs = () => { setEventLogs([]); localStorage.removeItem(EVENT_LOGS_KEY); };
@@ -508,17 +549,31 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         setEvents(prev => prev.map(e => e.category === name ? { ...e, category: undefined } : e));
     };
 
-    const addEvent = (event: Omit<Event, 'id'>, source: EventLogSource = 'unknown'): Event => {
+    const addEvent = useCallback((event: Omit<Event, 'id'>, source: EventLogSource = 'unknown'): Event => {
         const newEvent = { ...event, id: crypto.randomUUID() } as Event;
+
+        // Optimistic local update
         setEvents(prev => [...prev, newEvent]);
         addEventLog({ eventId: newEvent.id, eventTitle: newEvent.title, action: 'created', source });
-        return newEvent;
-    };
 
-    const updateEvent = (id: string, updates: Partial<Event>, source: EventLogSource = 'unknown') => {
+        if (USE_SUPABASE && userId) {
+            const insert = mapV1ToV2(newEvent, userId);
+            eventSupabaseService.createEvent(userId, insert).catch((err) => {
+                console.error('[CalendarContext] Supabase createEvent failed, rolling back:', err);
+                setEvents(prev => prev.filter(e => e.id !== newEvent.id));
+            });
+        }
+
+        return newEvent;
+    }, [userId, addEventLog]);
+
+    const updateEvent = useCallback((id: string, updates: Partial<Event>, source: EventLogSource = 'unknown') => {
         const existing = events.find(e => e.id === id);
-        setEvents(events.map(e => e.id === id ? { ...e, ...updates } : e));
-        // Compute field-level diff
+
+        // Optimistic local update
+        setEvents(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+
+        // Compute field-level diff for event log
         if (existing) {
             const changes: Record<string, { from: any; to: any }> = {};
             for (const key of Object.keys(updates) as (keyof Event)[]) {
@@ -532,15 +587,36 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
                 addEventLog({ eventId: id, eventTitle: existing.title, action: 'updated', changes, source });
             }
         }
-    };
 
-    const deleteEvent = (id: string, source: EventLogSource = 'unknown') => {
+        if (USE_SUPABASE) {
+            const v2Updates = mapV1UpdateToV2(updates);
+            eventSupabaseService.updateEvent(id, v2Updates).catch((err) => {
+                console.error('[CalendarContext] Supabase updateEvent failed, rolling back:', err);
+                if (existing) {
+                    setEvents(prev => prev.map(e => e.id === id ? existing : e));
+                }
+            });
+        }
+    }, [events, addEventLog]);
+
+    const deleteEvent = useCallback((id: string, source: EventLogSource = 'unknown') => {
         const existing = events.find(e => e.id === id);
-        setEvents(events.filter(e => e.id !== id));
+
+        // Optimistic local update
+        setEvents(prev => prev.filter(e => e.id !== id));
         if (existing) {
             addEventLog({ eventId: id, eventTitle: existing.title, action: 'deleted', source });
         }
-    };
+
+        if (USE_SUPABASE) {
+            eventSupabaseService.deleteEvent(id).catch((err) => {
+                console.error('[CalendarContext] Supabase deleteEvent failed, rolling back:', err);
+                if (existing) {
+                    setEvents(prev => [...prev, existing]);
+                }
+            });
+        }
+    }, [events, addEventLog]);
 
     const toggleCategory = (category: string) => {
         if (activeCategories.includes(category)) {
