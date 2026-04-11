@@ -2,7 +2,7 @@ import { supabase } from '@ofative/supabase-client';
 
 /**
  * Shape of the profiles.settings JSONB blob.
- * Each key corresponds to a former localStorage key in CalendarContext.
+ * Each key corresponds to a former v1 storage key in CalendarContext.
  */
 export interface SettingsBlob {
   categories?: unknown[];

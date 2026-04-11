@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Check, X, Video, Monitor, Globe, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -19,18 +19,9 @@ const PROVIDERS: Provider[] = [
     { id: 'bluejeans', name: 'BlueJeans', description: 'High-quality video meetings and events', icon: <Video className="w-5 h-5" />, color: 'text-blue-800' },
 ];
 
-const LS_KEY = 'settings-conferencing-connected';
-
 export const ConferencingSettings: React.FC = () => {
-    const [connected, setConnected] = useState<string[]>(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY);
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return [];
-    });
-
-    useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(connected)); }, [connected]);
+    // Stub UI — connection state is in-memory only
+    const [connected, setConnected] = useState<string[]>([]);
 
     const { toast } = useToast();
 

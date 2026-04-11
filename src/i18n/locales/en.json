@@ -117,7 +117,7 @@
         "importData": "Import data",
         "importDataDesc": "Restore from a previously exported JSON backup",
         "resetAll": "Reset all data",
-        "resetAllDesc": "Clear everything from localStorage permanently",
+        "resetAllDesc": "Permanently delete everything from your account",
         "language": "Language"
     },
     "focus": {

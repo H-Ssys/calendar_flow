@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { Note } from '@/types/note';
 import {
-    loadNotes, saveNotes, searchNotes as searchNotesService,
+    searchNotes as searchNotesService,
     generateNoteId, getWordCount, getExcerpt
 } from '@/services/noteService';
 import * as noteSupabaseService from '@/services/supabase/noteSupabaseService';
 import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/noteTypeMapper';
 import { useAuthContext } from './AuthContext';
 import { toast } from 'sonner';
-
-// ── Feature flag: 'true' → Supabase, anything else → localStorage ──
-const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
 
 // ========== Context Type ==========
 
@@ -59,10 +56,7 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { user } = useAuthContext();
     const userId = user?.id;
 
-    const [notes, setNotes] = useState<Note[]>(() => {
-        if (USE_SUPABASE) return []; // hydrated async via useEffect
-        return loadNotes();
-    });
+    const [notes, setNotes] = useState<Note[]>([]);
     const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated');
@@ -75,9 +69,9 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const activeNoteIdRef = useRef<string | null>(null);
     useEffect(() => { activeNoteIdRef.current = activeNoteId; }, [activeNoteId]);
 
-    // ── Refetch helper (Supabase mode) ───────────────────────────────
+    // ── Refetch helper ───────────────────────────────────────────────
     const refetchFromSupabase = useCallback(async () => {
-        if (!USE_SUPABASE || !userId) return;
+        if (!userId) return;
         try {
             const rows = await noteSupabaseService.fetchNotes(userId);
             metadataByNoteId.current = {};
@@ -91,21 +85,15 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [userId]);
 
-    // ── Supabase mode: fetch on mount + realtime subscription ────────
+    // ── Fetch on mount + realtime subscription ───────────────────────
     useEffect(() => {
-        if (!USE_SUPABASE || !userId) return;
+        if (!userId) return;
         refetchFromSupabase();
         const unsubscribe = noteSupabaseService.subscribeToNotes(userId, () => {
             refetchFromSupabase();
         });
         return () => { unsubscribe(); };
     }, [userId, refetchFromSupabase]);
-
-    // ── localStorage mode: persist on change ─────────────────────────
-    useEffect(() => {
-        if (USE_SUPABASE) return;
-        saveNotes(notes);
-    }, [notes]);
 
     // Active note
     const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId) ?? null, [notes, activeNoteId]);
@@ -140,7 +128,7 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setActiveNoteId(newNote.id);
         toast.success('Note created');
 
-        if (USE_SUPABASE && userId) {
+        if (userId) {
             const v2Note = mapV1ToV2(newNote, userId);
             noteSupabaseService.createNote(userId, v2Note).then((row) => {
                 metadataByNoteId.current[row.id] = row.metadata ?? {};
@@ -174,18 +162,16 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return updated;
         }));
 
-        if (USE_SUPABASE) {
-            const existingMeta = metadataByNoteId.current[id] ?? {};
-            const v2Updates = mapV1UpdateToV2(patch, existingMeta);
-            noteSupabaseService.updateNote(id, v2Updates).then((row) => {
-                metadataByNoteId.current[id] = row.metadata ?? {};
-            }).catch((err) => {
-                console.error('[NoteContext] Supabase updateNote failed, rolling back:', err);
-                if (previous) {
-                    setNotes(prev => prev.map(n => n.id === id ? previous! : n));
-                }
-            });
-        }
+        const existingMeta = metadataByNoteId.current[id] ?? {};
+        const v2Updates = mapV1UpdateToV2(patch, existingMeta);
+        noteSupabaseService.updateNote(id, v2Updates).then((row) => {
+            metadataByNoteId.current[id] = row.metadata ?? {};
+        }).catch((err) => {
+            console.error('[NoteContext] Supabase updateNote failed, rolling back:', err);
+            if (previous) {
+                setNotes(prev => prev.map(n => n.id === id ? previous! : n));
+            }
+        });
     }, []);
 
     const deleteNote = useCallback((id: string) => {
@@ -197,10 +183,8 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     action: {
                         label: 'Undo',
                         onClick: () => {
-                            // Local-only undo for both modes
                             setNotes(p => [deleted!, ...p]);
-                            // In Supabase mode, also re-create the note remotely
-                            if (USE_SUPABASE && userId && deleted) {
+                            if (userId && deleted) {
                                 const v2Note = mapV1ToV2(deleted, userId);
                                 noteSupabaseService.createNote(userId, v2Note).then((row) => {
                                     metadataByNoteId.current[row.id] = row.metadata ?? {};
@@ -219,16 +203,14 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setActiveNoteId(null);
         }
 
-        if (USE_SUPABASE) {
-            noteSupabaseService.deleteNote(id).then(() => {
-                delete metadataByNoteId.current[id];
-            }).catch((err) => {
-                console.error('[NoteContext] Supabase deleteNote failed, rolling back:', err);
-                if (deleted) {
-                    setNotes(prev => [deleted!, ...prev]);
-                }
-            });
-        }
+        noteSupabaseService.deleteNote(id).then(() => {
+            delete metadataByNoteId.current[id];
+        }).catch((err) => {
+            console.error('[NoteContext] Supabase deleteNote failed, rolling back:', err);
+            if (deleted) {
+                setNotes(prev => [deleted!, ...prev]);
+            }
+        });
     }, [activeNoteId, userId]);
 
     // Actions
@@ -248,7 +230,7 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setActiveNoteId(id);
 
         // If we just removed an empty draft, also delete it remotely
-        if (USE_SUPABASE && toCleanupId) {
+        if (toCleanupId) {
             noteSupabaseService.deleteNote(toCleanupId).then(() => {
                 delete metadataByNoteId.current[toCleanupId!];
             }).catch((err) => {
@@ -266,16 +248,14 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return { ...n, isPinned: nextPinned, updatedAt: now };
         }));
 
-        if (USE_SUPABASE) {
-            noteSupabaseService.updateNote(id, {
-                is_pinned: nextPinned,
-                updated_at: now.toISOString(),
-            }).then((row) => {
-                metadataByNoteId.current[id] = row.metadata ?? {};
-            }).catch((err) => {
-                console.error('[NoteContext] Supabase togglePin failed:', err);
-            });
-        }
+        noteSupabaseService.updateNote(id, {
+            is_pinned: nextPinned,
+            updated_at: now.toISOString(),
+        }).then((row) => {
+            metadataByNoteId.current[id] = row.metadata ?? {};
+        }).catch((err) => {
+            console.error('[NoteContext] Supabase togglePin failed:', err);
+        });
     }, []);
 
     const toggleFavorite = useCallback((id: string) => {
@@ -287,15 +267,13 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return { ...n, isFavorite: nextFavorite, updatedAt: now };
         }));
 
-        if (USE_SUPABASE) {
-            const existingMeta = metadataByNoteId.current[id] ?? {};
-            const v2Updates = mapV1UpdateToV2({ isFavorite: nextFavorite, updatedAt: now }, existingMeta);
-            noteSupabaseService.updateNote(id, v2Updates).then((row) => {
-                metadataByNoteId.current[id] = row.metadata ?? {};
-            }).catch((err) => {
-                console.error('[NoteContext] Supabase toggleFavorite failed:', err);
-            });
-        }
+        const existingMeta = metadataByNoteId.current[id] ?? {};
+        const v2Updates = mapV1UpdateToV2({ isFavorite: nextFavorite, updatedAt: now }, existingMeta);
+        noteSupabaseService.updateNote(id, v2Updates).then((row) => {
+            metadataByNoteId.current[id] = row.metadata ?? {};
+        }).catch((err) => {
+            console.error('[NoteContext] Supabase toggleFavorite failed:', err);
+        });
     }, []);
 
     // Queries

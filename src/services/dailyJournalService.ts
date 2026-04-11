@@ -1,30 +1,19 @@
 /**
  * Daily Journal Service
  *
- * Manages CRUD operations for DailyJournalEntry. Sync API surface backed by
- * either localStorage or a Supabase-hydrated in-memory cache (selected via
- * VITE_USE_SUPABASE feature flag).
- *
- * localStorage mode → key family: `daily-journal-${userId}`
- * Supabase mode     → table: journal_entries (one row per user+date)
- *
- * The sync API is preserved so existing callers (useDailyJournal hook,
- * DailyJournalView component) work unchanged. In Supabase mode the cache is
- * hydrated lazily on first access; callers can subscribe via
- * `subscribeToJournal(userId, cb)` to be notified when fresh data lands.
+ * Sync API backed by an in-memory cache that is hydrated lazily from Supabase
+ * `journal_entries` (one row per user+date). The sync surface is preserved so
+ * existing callers (useDailyJournal hook, DailyJournalView component) work
+ * unchanged. Callers subscribe via `subscribeToJournal(userId, cb)` to be
+ * notified when fresh data lands.
  */
 
-import { DailyJournalEntry, JournalGoals, JournalReflections, TimeSlot } from '@/types/dailyJournal';
+import { DailyJournalEntry, TimeSlot } from '@/types/dailyJournal';
 import { format, subDays } from 'date-fns';
 import { TimeConfig } from '@/context/CalendarContext';
 import * as journalSupabaseService from '@/services/supabase/journalSupabaseService';
 
-// ── Feature flag ─────────────────────────────────────────────────────
-const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
-
-const STORAGE_KEY = 'daily-journal';
-
-// ── In-memory cache (used by both modes for sync reads) ──────────────
+// ── In-memory cache ──────────────────────────────────────────────────
 const cacheByUser: Map<string, Map<string, DailyJournalEntry>> = new Map();
 const hydratedUsers: Set<string> = new Set();
 const hydrationInFlight: Map<string, Promise<void>> = new Map();
@@ -60,9 +49,8 @@ export function subscribeToJournal(userId: string, callback: () => void): () => 
   };
 }
 
-// ── Hydration (Supabase mode only) ──────────────────────────────────
+// ── Hydration ────────────────────────────────────────────────────────
 async function hydrateUser(userId: string): Promise<void> {
-  if (!USE_SUPABASE) return;
   if (hydratedUsers.has(userId)) return;
   const existing = hydrationInFlight.get(userId);
   if (existing) return existing;
@@ -89,47 +77,13 @@ async function hydrateUser(userId: string): Promise<void> {
   return promise;
 }
 
-// ── localStorage helpers (legacy mode) ──────────────────────────────
-const getUserStorageKey = (userId: string = 'default-user') => `${STORAGE_KEY}-${userId}`;
-
-const loadAllEntriesLocal = (userId: string = 'default-user'): Map<string, DailyJournalEntry> => {
-  try {
-    const key = getUserStorageKey(userId);
-    const data = localStorage.getItem(key);
-    if (!data) return new Map();
-    const parsed = JSON.parse(data);
-    return new Map(Object.entries(parsed));
-  } catch (error) {
-    console.error('Failed to load journal entries:', error);
-    return new Map();
-  }
-};
-
-const saveAllEntriesLocal = (entries: Map<string, DailyJournalEntry>, userId: string = 'default-user'): void => {
-  try {
-    const key = getUserStorageKey(userId);
-    const obj = Object.fromEntries(entries);
-    localStorage.setItem(key, JSON.stringify(obj));
-  } catch (error) {
-    console.error('Failed to save journal entries:', error);
-  }
-};
-
 /**
- * Load entries for a user from the active backend into the cache.
- * In localStorage mode this is sync (and runs every call). In Supabase mode
- * this is a no-op (hydration happens via hydrateUser).
+ * Trigger lazy hydration from Supabase and return the current cache snapshot.
+ * Cache may be empty on first call — subscribers fire when fresh data lands.
  */
 function loadAllEntries(userId: string): Map<string, DailyJournalEntry> {
-  if (USE_SUPABASE) {
-    // Trigger lazy hydration; return whatever is in the cache right now.
-    hydrateUser(userId);
-    return getCache(userId);
-  }
-  // localStorage path: replace cache contents from disk every read
-  const fromDisk = loadAllEntriesLocal(userId);
-  cacheByUser.set(userId, fromDisk);
-  return fromDisk;
+  hydrateUser(userId);
+  return getCache(userId);
 }
 
 // ── Time slot helpers ───────────────────────────────────────────────
@@ -245,22 +199,18 @@ export const upsertJournal = (
   // Always update the cache so the next sync read sees fresh data
   entries.set(dateKey, updatedEntry);
 
-  if (USE_SUPABASE) {
-    // Fire-and-forget upsert. On error we keep optimistic cache state.
-    journalSupabaseService
-      .upsertEntry(userId, journalSupabaseService.mapV1ToV2(updatedEntry, userId))
-      .then((row) => {
-        // Re-map the canonical row back into the cache (preserves server id)
-        const v1 = journalSupabaseService.mapV2ToV1(row, userId);
-        getCache(userId).set(dateKey, v1);
-        notifySubscribers(userId);
-      })
-      .catch((err) => {
-        console.error('[dailyJournalService] Supabase upsertEntry failed:', err);
-      });
-  } else {
-    saveAllEntriesLocal(entries, userId);
-  }
+  // Fire-and-forget upsert. On error we keep optimistic cache state.
+  journalSupabaseService
+    .upsertEntry(userId, journalSupabaseService.mapV1ToV2(updatedEntry, userId))
+    .then((row) => {
+      // Re-map the canonical row back into the cache (preserves server id)
+      const v1 = journalSupabaseService.mapV2ToV1(row, userId);
+      getCache(userId).set(dateKey, v1);
+      notifySubscribers(userId);
+    })
+    .catch((err) => {
+      console.error('[dailyJournalService] Supabase upsertEntry failed:', err);
+    });
 
   notifySubscribers(userId);
   return updatedEntry;
@@ -303,14 +253,10 @@ export const deleteJournal = (date: Date, userId: string = 'default-user'): void
   const existing = entries.get(dateKey);
   entries.delete(dateKey);
 
-  if (USE_SUPABASE) {
-    if (existing?.id) {
-      journalSupabaseService.deleteEntry(existing.id).catch((err) => {
-        console.error('[dailyJournalService] Supabase deleteEntry failed:', err);
-      });
-    }
-  } else {
-    saveAllEntriesLocal(entries, userId);
+  if (existing?.id) {
+    journalSupabaseService.deleteEntry(existing.id).catch((err) => {
+      console.error('[dailyJournalService] Supabase deleteEntry failed:', err);
+    });
   }
 
   notifySubscribers(userId);

@@ -3,18 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { useCalendar } from '@/context/CalendarContext';
 import { useTaskContext } from '@/context/TaskContext';
 import { useNoteContext } from '@/context/NoteContext';
+import { useAuthContext } from '@/context/AuthContext';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import {
-    exportAllDataJSON,
+    exportAllData,
     exportEventsCSV,
     exportTasksCSV,
     exportNotesCSV,
-    importAllData,
+    importData,
     downloadAsFile,
-    resetAllData,
+    resetAllDataForUser,
 } from '@/services/dataService';
 import { Download, Upload, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -30,14 +31,22 @@ export const GeneralSettings: React.FC = () => {
     } = useCalendar();
     const { tasks } = useTaskContext();
     const { notes } = useNoteContext();
+    const { user } = useAuthContext();
+    const userId = user?.id;
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Export handlers ──
-    const handleExportJSON = () => {
-        const json = exportAllDataJSON();
-        const filename = `ofative-backup-${format(new Date(), 'yyyy-MM-dd')}.json`;
-        downloadAsFile(json, filename);
-        toast.success('Full backup exported');
+    const handleExportJSON = async () => {
+        if (!userId) { toast.error('You must be signed in to export'); return; }
+        try {
+            const json = await exportAllData(userId);
+            const filename = `ofative-backup-${format(new Date(), 'yyyy-MM-dd')}.json`;
+            downloadAsFile(json, filename);
+            toast.success('Full backup exported');
+        } catch (err) {
+            console.error('[GeneralSettings] Export failed:', err);
+            toast.error('Export failed. See console for details.');
+        }
     };
 
     const handleExportCSV = (type: 'events' | 'tasks' | 'notes') => {
@@ -54,11 +63,14 @@ export const GeneralSettings: React.FC = () => {
     // ── Import handler ──
     const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) return;
+        if (!file || !userId) {
+            if (!userId) toast.error('You must be signed in to import');
+            return;
+        }
 
         const reader = new FileReader();
-        reader.onload = () => {
-            const result = importAllData(reader.result as string);
+        reader.onload = async () => {
+            const result = await importData(userId, reader.result as string);
             if (result.success) {
                 toast.success(result.message + ' Reload to apply.');
             } else {
@@ -70,10 +82,16 @@ export const GeneralSettings: React.FC = () => {
     };
 
     // ── Reset handler ──
-    const handleReset = () => {
+    const handleReset = async () => {
+        if (!userId) { toast.error('You must be signed in to reset'); return; }
         if (!window.confirm('This will delete ALL data (events, tasks, notes, journal). Continue?')) return;
-        resetAllData();
-        toast.success('All data cleared. Reload to apply.');
+        try {
+            await resetAllDataForUser(userId);
+            toast.success('All data cleared. Reload to apply.');
+        } catch (err) {
+            console.error('[GeneralSettings] Reset failed:', err);
+            toast.error('Reset failed. See console for details.');
+        }
     };
 
     return (
@@ -147,7 +165,7 @@ export const GeneralSettings: React.FC = () => {
                         value={i18n.language}
                         onValueChange={(lang) => {
                             i18n.changeLanguage(lang);
-                            localStorage.setItem('language', lang);
+                            // Persisted via profileConfig.language → profiles.language
                         }}
                     >
                         <SelectTrigger className="w-[180px]">

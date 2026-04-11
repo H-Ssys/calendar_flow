@@ -13,32 +13,13 @@ export interface FocusTimerState {
     activeTaskId: string | null;
 }
 
-// ─── Feature flag ───
-const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
-
-const STORAGE_KEY = 'focus-timer-state';
-
-const loadStateLocal = (): FocusTimerState | null => {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-    } catch { return null; }
-};
-
-const saveStateLocal = (state: FocusTimerState) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-};
-
 // ─── Hook ───
 
 export const useFocusTimer = (workMinutes = 25, breakMinutes = 5) => {
     const { user } = useAuthContext();
     const userId = user?.id;
 
-    const initial = USE_SUPABASE ? null : loadStateLocal();
-
-    const [state, setState] = useState<FocusTimerState>(initial ?? {
+    const [state, setState] = useState<FocusTimerState>({
         isActive: false,
         isPaused: false,
         timeRemaining: workMinutes * 60,
@@ -52,9 +33,9 @@ export const useFocusTimer = (workMinutes = 25, breakMinutes = 5) => {
     const supabaseLoadedRef = useRef(false);
     const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Supabase: hydrate latest live state on mount ───────────────
+    // ── Hydrate latest live state on mount ──────────────────────────
     useEffect(() => {
-        if (!USE_SUPABASE || !userId) return;
+        if (!userId) return;
         let cancelled = false;
         (async () => {
             try {
@@ -81,13 +62,9 @@ export const useFocusTimer = (workMinutes = 25, breakMinutes = 5) => {
         return () => { cancelled = true; };
     }, [userId, workMinutes]);
 
-    // ── Persist state changes ──────────────────────────────────────
+    // ── Persist state changes (debounced) ──────────────────────────
     useEffect(() => {
-        if (!USE_SUPABASE) {
-            saveStateLocal(state);
-            return;
-        }
-        // Supabase mode — debounce writes; don't write before initial hydration
+        // Don't write before initial hydration completes
         if (!userId || !supabaseLoadedRef.current) return;
 
         if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);

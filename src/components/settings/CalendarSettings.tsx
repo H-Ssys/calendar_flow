@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -17,18 +17,9 @@ const PROVIDERS: Provider[] = [
     { id: 'exchange', name: 'Exchange', icon: 'E', color: 'text-blue-600' },
 ];
 
-const LS_KEY = 'settings-calendar-connected';
-
 export const CalendarSettings: React.FC = () => {
-    const [connected, setConnected] = useState<string[]>(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY);
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return [];
-    });
-
-    useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(connected)); }, [connected]);
+    // Stub UI — connection state is in-memory only
+    const [connected, setConnected] = useState<string[]>([]);
 
     const { toast } = useToast();
 

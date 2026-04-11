@@ -5,9 +5,6 @@ import * as settingsService from '@/services/supabase/settingsSupabaseService';
 import type { SettingsBlob } from '@/services/supabase/settingsSupabaseService';
 import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/eventTypeMapper';
 
-// ── Feature flag: 'true' → Supabase, anything else → localStorage ──
-const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
-
 // ── Debounce helper for settings saves ─────────────────────────────
 function useDebouncedCallback<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
     const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -220,188 +217,25 @@ export const useCalendar = () => {
     return context;
 };
 
-// Helper to create dates for current week
-const getThisWeek = (dayOffset: number, hour: number, minute: number = 0) => {
-    const date = new Date();
-    const currentDay = (date.getDay() + 6) % 7; // Monday = 0
-    date.setDate(date.getDate() - currentDay + dayOffset);
-    date.setHours(hour, minute, 0, 0);
-    return date;
-};
-
-// Initial Mock Data
-const INITIAL_EVENTS: Event[] = [
-    {
-        id: '1',
-        title: 'Weekly Meeting',
-        startTime: getThisWeek(0, 8, 0),
-        endTime: getThisWeek(0, 9, 0),
-        isAllDay: false,
-        emoji: '📅',
-        color: DEFAULT_CATEGORY_COLOR,
-        category: 'Work Plan',
-        participants: [
-            { name: 'Alice', email: 'alice@example.com' },
-            { name: 'Bob', email: 'bob@example.com' }
-        ]
-    },
-    {
-        id: '2',
-        title: 'Feedback Design',
-        startTime: getThisWeek(2, 7, 0),
-        endTime: getThisWeek(2, 8, 0),
-        isAllDay: false,
-        emoji: '📝',
-        color: '#93E9BE',
-        category: 'Holiday'
-    },
-    {
-        id: '3',
-        title: 'Sprint 2',
-        startTime: getThisWeek(4, 8, 0),
-        endTime: getThisWeek(4, 9, 0),
-        isAllDay: false,
-        emoji: '⚡',
-        color: '#90D5FF',
-        category: 'Fitness'
-    },
-    {
-        id: '4',
-        title: 'Daily Standup',
-        startTime: getThisWeek(1, 9, 0),
-        endTime: getThisWeek(1, 12, 0),
-        isAllDay: false,
-        emoji: '🔥',
-        color: DEFAULT_CATEGORY_COLOR,
-        category: 'Personal',
-        participants: [
-            { name: 'Charlie', email: 'charlie@example.com' },
-            { name: 'Dave', email: 'dave@example.com' },
-            { name: 'Eve', email: 'eve@example.com' },
-            { name: 'Frank', email: 'frank@example.com' },
-            { name: 'Grace', email: 'grace@example.com' }
-        ]
-    },
-    {
-        id: '5',
-        title: 'Sprint 1',
-        startTime: getThisWeek(0, 10, 0),
-        endTime: getThisWeek(0, 13, 0),
-        isAllDay: false,
-        emoji: '⚡️',
-        color: '#90D5FF',
-        category: 'Fitness'
-    },
-    {
-        id: '6',
-        title: 'Prototyping',
-        startTime: getThisWeek(2, 10, 0),
-        endTime: getThisWeek(2, 13, 0),
-        isAllDay: false,
-        emoji: '📂',
-        color: '#4FD1C5',
-        category: 'Work Plan',
-        participants: [
-            { name: 'Heidi', email: 'heidi@example.com' }
-        ]
-    },
-    {
-        id: '7',
-        title: 'Wireframe',
-        startTime: getThisWeek(5, 10, 0),
-        endTime: getThisWeek(5, 11, 0),
-        isAllDay: false,
-        emoji: '📃',
-        color: DEFAULT_CATEGORY_COLOR,
-        category: 'Personal'
-    },
-    {
-        id: '8',
-        title: 'High Fidelity',
-        startTime: getThisWeek(5, 11, 0),
-        endTime: getThisWeek(5, 14, 0),
-        isAllDay: false,
-        emoji: '🎨',
-        color: '#4FD1C5',
-        category: 'Work Plan'
-    },
-    {
-        id: '9',
-        title: 'Daily Standup',
-        startTime: getThisWeek(4, 12, 0),
-        endTime: getThisWeek(4, 15, 0),
-        isAllDay: false,
-        emoji: '🔥',
-        color: '#FFB088',
-        category: 'Project'
-    },
-    {
-        id: '10',
-        title: 'Review Design',
-        startTime: getThisWeek(1, 14, 0),
-        endTime: getThisWeek(1, 15, 0),
-        isAllDay: false,
-        emoji: '💫',
-        color: '#B2F5EA',
-        category: 'Holiday'
-    },
-    {
-        id: '11',
-        title: 'Feedback Design',
-        startTime: getThisWeek(6, 8, 0),
-        endTime: getThisWeek(6, 11, 0),
-        isAllDay: false,
-        emoji: '📝',
-        color: '#B2F5EA',
-        category: 'Holiday'
-    },
-];
-
-// Date reviver for JSON.parse
-const dateReviver = (_key: string, value: unknown) => {
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
-        return new Date(value);
-    }
-    return value;
-};
-
-const STORAGE_KEY = 'calendar-events';
-
 export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user } = useAuthContext();
     const userId = user?.id;
 
-    // ── Events state (dual-mode init) ───────────────────────────────
-    const [events, setEvents] = useState<Event[]>(() => {
-        if (USE_SUPABASE) return []; // loaded async via useEffect
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                const parsed = JSON.parse(stored, dateReviver);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-            }
-        } catch { /* ignore corrupt data */ }
-        return INITIAL_EVENTS;
-    });
+    // ── Events state ─────────────────────────────────────────────────
+    const [events, setEvents] = useState<Event[]>([]);
 
-    // Track whether initial Supabase load is complete to avoid clobbering
-    const supabaseLoaded = useRef(false);
-
-    // ── Supabase mode: fetch events on mount + realtime subscription ─
+    // ── Fetch events on mount + realtime subscription ────────────────
     useEffect(() => {
-        if (!USE_SUPABASE || !userId) return;
+        if (!userId) return;
 
         let cancelled = false;
 
         eventSupabaseService.fetchEvents(userId).then((rows) => {
             if (cancelled) return;
             setEvents(rows.map(mapV2ToV1));
-            supabaseLoaded.current = true;
         });
 
         const unsubscribe = eventSupabaseService.subscribeToEvents(userId, () => {
-            // On any realtime change, refetch the full list
-            // This is simple and correct — optimistic updates are a future optimization
             eventSupabaseService.fetchEvents(userId).then((rows) => {
                 if (!cancelled) setEvents(rows.map(mapV2ToV1));
             });
@@ -413,28 +247,10 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         };
     }, [userId]);
 
-    // ── localStorage mode: persist events ────────────────────────────
-    useEffect(() => {
-        if (USE_SUPABASE) return;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-    }, [events]);
     const [currentView, setCurrentView] = useState<ViewType>('weekly');
 
-    // ── Event Logs ──────────────────────────────────────────────────────
-    const EVENT_LOGS_KEY = 'calendar-event-logs';
-    const [eventLogs, setEventLogs] = useState<EventLog[]>(() => {
-        try {
-            const stored = localStorage.getItem(EVENT_LOGS_KEY);
-            if (stored) {
-                const parsed = JSON.parse(stored, dateReviver);
-                if (Array.isArray(parsed)) return parsed;
-            }
-        } catch { /* ignore */ }
-        return [];
-    });
-    useEffect(() => {
-        localStorage.setItem(EVENT_LOGS_KEY, JSON.stringify(eventLogs));
-    }, [eventLogs]);
+    // ── Event Logs (in-memory only — P2 future task to persist) ──────
+    const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
 
     const addEventLog = useCallback((log: Omit<EventLog, 'id' | 'timestamp'>) => {
         const newLog: EventLog = { ...log, id: crypto.randomUUID(), timestamp: new Date() };
@@ -442,7 +258,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     }, []);
 
     const getEventLogs = (eventId: string) => eventLogs.filter(l => l.eventId === eventId);
-    const clearEventLogs = () => { setEventLogs([]); localStorage.removeItem(EVENT_LOGS_KEY); };
+    const clearEventLogs = () => { setEventLogs([]); };
     const [dailyViewVariant, setDailyViewVariant] = useState<DailyViewVariant>('journal'); // Changed to 'journal' as default
     const [currentDate, setCurrentDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
@@ -454,88 +270,26 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [weekStart, setWeekStart] = useState<WeekStart>('monday');
     const [showDeclinedEvents, setShowDeclinedEvents] = useState(false);
 
-    const [categories, setCategories] = useState<Category[]>(() => {
-        if (USE_SUPABASE) return DEFAULT_CATEGORIES; // hydrated async
-        try {
-            const stored = localStorage.getItem('settings-categories');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return DEFAULT_CATEGORIES;
-    });
+    const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
 
     // Per-View Time Configuration
     const DAILY_DEFAULTS: ViewTimeConfig = { startHour: 6, endHour: 22, hourInterval: 2 };
     const WEEKLY_DEFAULTS: ViewTimeConfig = { startHour: 6, endHour: 22, hourInterval: 2 };
 
-    const [dailyTimeConfig, setDailyTimeConfig] = useState<ViewTimeConfig>(() => {
-        if (USE_SUPABASE) return DAILY_DEFAULTS;
-        try {
-            const stored = localStorage.getItem('settings-daily-time-config');
-            if (stored) return { ...DAILY_DEFAULTS, ...JSON.parse(stored) };
-        } catch { /* ignore */ }
-        return DAILY_DEFAULTS;
-    });
-
-    const [weeklyTimeConfig, setWeeklyTimeConfig] = useState<ViewTimeConfig>(() => {
-        if (USE_SUPABASE) return WEEKLY_DEFAULTS;
-        try {
-            const stored = localStorage.getItem('settings-weekly-time-config');
-            if (stored) return { ...WEEKLY_DEFAULTS, ...JSON.parse(stored) };
-        } catch { /* ignore */ }
-        return WEEKLY_DEFAULTS;
-    });
-
-    const [monthlyViewConfig, setMonthlyViewConfig] = useState<MonthlyViewConfig>(() => {
-        if (USE_SUPABASE) return { rowHighlightColor: '#EFF6FF' };
-        try {
-            const stored = localStorage.getItem('settings-monthly-view-config');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return { rowHighlightColor: '#EFF6FF' }; // blue-50
-    });
-
-    const [yearlyViewConfig, setYearlyViewConfig] = useState<YearlyViewConfig>(() => {
-        if (USE_SUPABASE) return { monthHighlightColor: '#DBEAFE' };
-        try {
-            const stored = localStorage.getItem('settings-yearly-view-config');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return { monthHighlightColor: '#DBEAFE' }; // blue-100
-    });
-
-    const [menuBarConfig, setMenuBarConfig] = useState<MenuBarConfig>(() => {
-        if (USE_SUPABASE) return { enabled: false, eventPeriod: 'today' };
-        try {
-            const stored = localStorage.getItem('settings-menu-bar');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return { enabled: false, eventPeriod: 'today' };
-    });
-
-    const [profileConfig, setProfileConfig] = useState<ProfileConfig>(() => {
-        if (USE_SUPABASE) return { firstName: '', lastName: '', bio: '', language: 'en', timezone: 'UTC' };
-        try {
-            const stored = localStorage.getItem('settings-profile');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return { firstName: 'Alex', lastName: 'Rivera', bio: 'Product Designer at Ofative. Passionate about creating seamless user experiences and efficient workflows.', language: 'English (US)', timezone: 'GMT+7 (Jakarta)' };
-    });
-
-    const [emailNotificationConfig, setEmailNotificationConfig] = useState<EmailNotificationConfig>(() => {
-        if (USE_SUPABASE) return { newInvitations: true, eventUpdates: true, eventCancellations: true, dailyAgenda: false, newSignIns: true, securityAlerts: true };
-        try {
-            const stored = localStorage.getItem('settings-email-notifications');
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return { newInvitations: true, eventUpdates: true, eventCancellations: true, dailyAgenda: false, newSignIns: true, securityAlerts: true };
-    });
+    const [dailyTimeConfig, setDailyTimeConfig] = useState<ViewTimeConfig>(DAILY_DEFAULTS);
+    const [weeklyTimeConfig, setWeeklyTimeConfig] = useState<ViewTimeConfig>(WEEKLY_DEFAULTS);
+    const [monthlyViewConfig, setMonthlyViewConfig] = useState<MonthlyViewConfig>({ rowHighlightColor: '#EFF6FF' });
+    const [yearlyViewConfig, setYearlyViewConfig] = useState<YearlyViewConfig>({ monthHighlightColor: '#DBEAFE' });
+    const [menuBarConfig, setMenuBarConfig] = useState<MenuBarConfig>({ enabled: false, eventPeriod: 'today' });
+    const [profileConfig, setProfileConfig] = useState<ProfileConfig>({ firstName: '', lastName: '', bio: '', language: 'en', timezone: 'UTC' });
+    const [emailNotificationConfig, setEmailNotificationConfig] = useState<EmailNotificationConfig>({ newInvitations: true, eventUpdates: true, eventCancellations: true, dailyAgenda: false, newSignIns: true, securityAlerts: true });
 
     // Track whether Supabase settings have been loaded (prevents save-on-mount with defaults)
     const settingsLoaded = useRef(false);
 
-    // ── Supabase mode: load settings on mount ───────────────────────
+    // ── Load settings from Supabase on mount ────────────────────────
     useEffect(() => {
-        if (!USE_SUPABASE || !userId) return;
+        if (!userId) return;
         settingsService.fetchSettings(userId).then(({ settings: s, profile: p }) => {
             if (s.categories && Array.isArray(s.categories)) setCategories(s.categories as Category[]);
             if (s.dailyTimeConfig) setDailyTimeConfig({ ...DAILY_DEFAULTS, ...s.dailyTimeConfig });
@@ -563,7 +317,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     // ── Debounced Supabase settings save ────────────────────────────
     const saveSettingsToSupabase = useCallback(() => {
-        if (!USE_SUPABASE || !userId || !settingsLoaded.current) return;
+        if (!userId || !settingsLoaded.current) return;
         const blob: SettingsBlob = {
             categories,
             dailyTimeConfig,
@@ -580,15 +334,15 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     const debouncedSaveSettings = useDebouncedCallback(saveSettingsToSupabase, 300);
 
-    // Trigger debounced save whenever any setting changes (Supabase mode only)
+    // Trigger debounced save whenever any setting changes
     useEffect(() => {
-        if (!USE_SUPABASE || !settingsLoaded.current) return;
+        if (!settingsLoaded.current) return;
         debouncedSaveSettings();
     }, [debouncedSaveSettings]);
 
     // ── Debounced Supabase profile columns save ─────────────────────
     const saveProfileToSupabase = useCallback(() => {
-        if (!USE_SUPABASE || !userId || !settingsLoaded.current) return;
+        if (!userId || !settingsLoaded.current) return;
         const displayName = [profileConfig.firstName, profileConfig.lastName].filter(Boolean).join(' ');
         settingsService.updateProfileColumns(userId, {
             display_name: displayName || null,
@@ -603,46 +357,31 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const debouncedSaveProfile = useDebouncedCallback(saveProfileToSupabase, 300);
 
     useEffect(() => {
-        if (!USE_SUPABASE || !settingsLoaded.current) return;
+        if (!settingsLoaded.current) return;
         debouncedSaveProfile();
     }, [debouncedSaveProfile]);
-
-    // ── localStorage mode: persist settings ─────────────────────────
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-daily-time-config', JSON.stringify(dailyTimeConfig)); }, [dailyTimeConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-weekly-time-config', JSON.stringify(weeklyTimeConfig)); }, [weeklyTimeConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-monthly-view-config', JSON.stringify(monthlyViewConfig)); }, [monthlyViewConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-yearly-view-config', JSON.stringify(yearlyViewConfig)); }, [yearlyViewConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-menu-bar', JSON.stringify(menuBarConfig)); }, [menuBarConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-profile', JSON.stringify(profileConfig)); }, [profileConfig]);
-    useEffect(() => { if (!USE_SUPABASE) localStorage.setItem('settings-email-notifications', JSON.stringify(emailNotificationConfig)); }, [emailNotificationConfig]);
 
     // Legacy aliases — timeConfig points to weeklyTimeConfig for backward compatibility
     const timeConfig = weeklyTimeConfig;
     const setTimeConfig = setWeeklyTimeConfig;
 
+    // Categories CRUD — debounced settings effect picks up Supabase persistence
     const addCategory = (category: Category) => {
-        const updated = [...categories, category];
-        setCategories(updated);
-        // In Supabase mode, categories save is handled by the debounced settings effect
-        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
+        setCategories(prev => [...prev, category]);
         if (!activeCategories.includes(category.name)) {
             setActiveCategories([...activeCategories, category.name]);
         }
     };
 
     const updateCategory = (name: string, updates: Partial<Category>) => {
-        const updated = categories.map(c => c.name === name ? { ...c, ...updates } : c);
-        setCategories(updated);
-        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
+        setCategories(prev => prev.map(c => c.name === name ? { ...c, ...updates } : c));
         if (updates.color) {
             setEvents(prev => prev.map(e => e.category === name ? { ...e, color: updates.color! } : e));
         }
     };
 
     const deleteCategory = (name: string) => {
-        const updated = categories.filter(c => c.name !== name);
-        setCategories(updated);
-        if (!USE_SUPABASE) localStorage.setItem('settings-categories', JSON.stringify(updated));
+        setCategories(prev => prev.filter(c => c.name !== name));
         setActiveCategories(prev => prev.filter(c => c !== name));
         setEvents(prev => prev.map(e => e.category === name ? { ...e, category: undefined } : e));
     };
@@ -654,7 +393,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         setEvents(prev => [...prev, newEvent]);
         addEventLog({ eventId: newEvent.id, eventTitle: newEvent.title, action: 'created', source });
 
-        if (USE_SUPABASE && userId) {
+        if (userId) {
             const insert = mapV1ToV2(newEvent, userId);
             eventSupabaseService.createEvent(userId, insert).catch((err) => {
                 console.error('[CalendarContext] Supabase createEvent failed, rolling back:', err);
@@ -686,15 +425,13 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
             }
         }
 
-        if (USE_SUPABASE) {
-            const v2Updates = mapV1UpdateToV2(updates);
-            eventSupabaseService.updateEvent(id, v2Updates).catch((err) => {
-                console.error('[CalendarContext] Supabase updateEvent failed, rolling back:', err);
-                if (existing) {
-                    setEvents(prev => prev.map(e => e.id === id ? existing : e));
-                }
-            });
-        }
+        const v2Updates = mapV1UpdateToV2(updates);
+        eventSupabaseService.updateEvent(id, v2Updates).catch((err) => {
+            console.error('[CalendarContext] Supabase updateEvent failed, rolling back:', err);
+            if (existing) {
+                setEvents(prev => prev.map(e => e.id === id ? existing : e));
+            }
+        });
     }, [events, addEventLog]);
 
     const deleteEvent = useCallback((id: string, source: EventLogSource = 'unknown') => {
@@ -706,14 +443,12 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
             addEventLog({ eventId: id, eventTitle: existing.title, action: 'deleted', source });
         }
 
-        if (USE_SUPABASE) {
-            eventSupabaseService.deleteEvent(id).catch((err) => {
-                console.error('[CalendarContext] Supabase deleteEvent failed, rolling back:', err);
-                if (existing) {
-                    setEvents(prev => [...prev, existing]);
-                }
-            });
-        }
+        eventSupabaseService.deleteEvent(id).catch((err) => {
+            console.error('[CalendarContext] Supabase deleteEvent failed, rolling back:', err);
+            if (existing) {
+                setEvents(prev => [...prev, existing]);
+            }
+        });
     }, [events, addEventLog]);
 
     const toggleCategory = (category: string) => {

@@ -1,21 +1,52 @@
 ---
 type: workflow-state
-current_workflow: m6-data-migration-script
+current_workflow: m7-cleanup-ship-v2
 current_step: 1
-feature_name: data-migration-script
+feature_name: cleanup-ship-v2
 status: complete
-last_updated: 2026-04-12T01:00:00Z
-last_step_summary: "M6 Data Migration Script complete. migrationService.ts reads all 12 localStorage keys (settings/events/tasks/notes/journal/focus), transforms via existing v1↔v2 mappers, writes through Supabase services in 6 ordered steps. dataService.ts gains async dual-mode exportAllData/importData/resetAllDataForUser (legacy sync functions preserved). MigrationBanner shows invitation → progress → success/error states. Wired into ProtectedLayout. Build verified ✓"
+last_updated: 2026-04-12T02:00:00Z
+last_step_summary: "v2.0 migration complete. All data in Supabase."
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m6-data-migration-script
-- **Step**: M6 — Complete
-- **Feature**: One-time localStorage → Supabase migration + dual-mode export/import/reset
+- **Workflow**: m7-cleanup-ship-v2
+- **Step**: M7 — Complete (v2.0 SHIPPED)
+- **Feature**: Remove all localStorage code, feature flags, and v1 shims
 - **Status**: complete
+
+## M7 Cleanup + Ship v2.0 (2026-04-12)
+| Task | Status | Summary |
+|------|--------|---------|
+| Remove USE_SUPABASE flag | done | Stripped from CalendarContext, TaskContext, NoteContext, dailyJournalService, useFocusTimer, dataService |
+| Remove localStorage from contexts | done | All `localStorage.getItem/setItem` calls deleted from contexts/services/hooks |
+| Remove legacy sync dataService API | done | exportAllDataJSON, importAllData, resetAllData deleted; only async exportAllData/importData/resetAllDataForUser remain |
+| Update GeneralSettings call sites | done | Now uses async dataService API + AuthContext userId |
+| Strip taskService/noteService persistence | done | Only pure helpers remain (search, query, ID gen, derived fields) |
+| Strip stub settings UIs | done | RoomsSettings, ConferencingSettings, CalendarSettings, BillingSettings — connection state now in-memory only |
+| Strip i18n localStorage default | done | i18n now defaults to 'vi'; language preference persisted via profileConfig.language |
+| Delete dataService.test.ts | done | Tested removed legacy sync functions; obsolete |
+| Update .env.example | done | Removed VITE_USE_SUPABASE; only VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY remain |
+| Strip stale comments | done | DailyJournalView header, settingsSupabaseService docblock, useDailyJournal comment, en.json reset description |
+| Build verified | done | npx vite build → ✓ built in 1.00s |
+| **localStorage grep verification** | **done** | **0 results outside migrationService** ✓ |
+
+### Files NOT touched (per spec)
+- `src/services/migrationService.ts` — still reads all 12 legacy localStorage keys + writes `supabase-migrated-${userId}` flag
+- `src/components/MigrationBanner.tsx` — UI for one-time migration
+
+### Verification command result
+```
+grep -r "localStorage" src/ --include="*.ts" --include="*.tsx" | grep -v "migrationService\|node_modules\|supabase-migrated" | wc -l
+0
+```
+
+### Known follow-ups (not blocking ship)
+- Event audit logs are now in-memory only (P2). They were never user-facing and would grow unbounded — defer until needed.
+- Stub settings (Rooms/Conferencing/CalendarConnections/Billing) lose connection state on reload. Acceptable for non-functional stubs; will be wired to real integrations or proper Supabase tables in future milestones.
+- noteService.ts test fixture (`__tests__/dataService.test.ts`) was deleted; consider adding new tests against the async Supabase API once a mock layer exists.
 
 ## M6 Data Migration Script (2026-04-12)
 | Task | Status | Summary |

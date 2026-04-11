@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────
-// Data Export / Import Service
+// Data Export / Import Service (Supabase-only, v2.0)
 // ──────────────────────────────────────────────────
 
 import { Event } from '@/context/CalendarContext';
@@ -9,14 +9,11 @@ import * as eventSupabaseService from '@/services/supabase/eventSupabaseService'
 import * as taskSupabaseService from '@/services/supabase/taskSupabaseService';
 import * as noteSupabaseService from '@/services/supabase/noteSupabaseService';
 import * as journalSupabaseService from '@/services/supabase/journalSupabaseService';
-import * as focusSupabaseService from '@/services/supabase/focusSupabaseService';
 import * as settingsSupabaseService from '@/services/supabase/settingsSupabaseService';
 import { mapV2ToV1 as mapEventV2ToV1, mapV1ToV2 as mapEventV1ToV2 } from '@/utils/eventTypeMapper';
 import { mapV2ToV1 as mapTaskV2ToV1, mapV1ToV2 as mapTaskV1ToV2 } from '@/utils/taskTypeMapper';
 import { mapV2ToV1 as mapNoteV2ToV1, mapV1ToV2 as mapNoteV1ToV2 } from '@/utils/noteTypeMapper';
 import { supabase } from '@ofative/supabase-client';
-
-const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
 
 // ── Download helper ──
 
@@ -28,20 +25,6 @@ export const downloadAsFile = (content: string, filename: string, mimeType = 'ap
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-};
-
-// ── JSON Export ──
-
-export const exportAllDataJSON = (): string => {
-    const data = {
-        version: '1.0',
-        exportedAt: new Date().toISOString(),
-        events: JSON.parse(localStorage.getItem('calendar-events') || '[]'),
-        tasks: JSON.parse(localStorage.getItem('ofative-tasks') || '[]'),
-        notes: JSON.parse(localStorage.getItem('ofative-notes') || '[]'),
-        journal: JSON.parse(localStorage.getItem('daily-journal-default-user') || '{}'),
-    };
-    return JSON.stringify(data, null, 2);
 };
 
 // ── CSV Export ──
@@ -72,7 +55,7 @@ export const exportNotesCSV = (notes: Note[]): string => {
     return [headers, ...rows].join('\n');
 };
 
-// ── JSON Import ──
+// ── Import result ──
 
 export interface ImportResult {
     success: boolean;
@@ -80,68 +63,12 @@ export interface ImportResult {
     counts?: { events: number; tasks: number; notes: number };
 }
 
-export const importAllData = (jsonString: string): ImportResult => {
-    try {
-        const data = JSON.parse(jsonString);
-
-        if (!data.version) {
-            return { success: false, message: 'Invalid backup file: missing version field.' };
-        }
-
-        let eventCount = 0, taskCount = 0, noteCount = 0;
-
-        if (Array.isArray(data.events)) {
-            localStorage.setItem('calendar-events', JSON.stringify(data.events));
-            eventCount = data.events.length;
-        }
-
-        if (Array.isArray(data.tasks)) {
-            localStorage.setItem('ofative-tasks', JSON.stringify(data.tasks));
-            taskCount = data.tasks.length;
-        }
-
-        if (Array.isArray(data.notes)) {
-            localStorage.setItem('ofative-notes', JSON.stringify(data.notes));
-            noteCount = data.notes.length;
-        }
-
-        if (data.journal && typeof data.journal === 'object') {
-            localStorage.setItem('daily-journal-default-user', JSON.stringify(data.journal));
-        }
-
-        return {
-            success: true,
-            message: `Imported ${eventCount} events, ${taskCount} tasks, ${noteCount} notes.`,
-            counts: { events: eventCount, tasks: taskCount, notes: noteCount },
-        };
-    } catch {
-        return { success: false, message: 'Failed to parse backup file. Ensure it is valid JSON.' };
-    }
-};
-
-// ── Reset ──
-
-export const resetAllData = () => {
-    localStorage.removeItem('calendar-events');
-    localStorage.removeItem('ofative-tasks');
-    localStorage.removeItem('ofative-notes');
-    localStorage.removeItem('daily-journal-default-user');
-    localStorage.removeItem('focus-timer-state');
-};
-
 // ──────────────────────────────────────────────────
-// Async dual-mode API (Supabase + localStorage)
+// Async Supabase API
 // ──────────────────────────────────────────────────
-//
-// These wrap the legacy sync functions when USE_SUPABASE is false. When the
-// flag is on, they read/write through the Supabase service layer.
 
-/** Export all data for a user as JSON. Dual-mode. */
+/** Export all data for a user as JSON. */
 export async function exportAllData(userId: string): Promise<string> {
-    if (!USE_SUPABASE) {
-        return exportAllDataJSON();
-    }
-
     const [events, taskRes, notes, journal] = await Promise.all([
         eventSupabaseService.fetchEvents(userId),
         taskSupabaseService.fetchTasks(userId),
@@ -175,12 +102,8 @@ export async function exportAllData(userId: string): Promise<string> {
     return JSON.stringify(data, null, 2);
 }
 
-/** Import a backup JSON. Dual-mode. */
+/** Import a backup JSON. */
 export async function importData(userId: string, jsonString: string): Promise<ImportResult> {
-    if (!USE_SUPABASE) {
-        return importAllData(jsonString);
-    }
-
     let data: {
         events?: Event[];
         tasks?: Task[];
@@ -257,14 +180,8 @@ export async function importData(userId: string, jsonString: string): Promise<Im
     };
 }
 
-/** Reset all data for a user. Dual-mode. */
+/** Delete all data for a user across every Supabase table (RLS-scoped). */
 export async function resetAllDataForUser(userId: string): Promise<void> {
-    if (!USE_SUPABASE) {
-        resetAllData();
-        return;
-    }
-
-    // Delete user-scoped rows from each table. RLS ensures we only touch own rows.
     const tables = ['events', 'tasks', 'notes', 'journal_entries', 'focus_sessions'];
     for (const table of tables) {
         try {

@@ -16,7 +16,7 @@
  * - Data model: src/types/dailyJournal.ts
  * - Service: src/services/dailyJournalService.ts
  * - Hook: src/hooks/useDailyJournal.ts
- * - Storage: localStorage (key: daily-journal-${userId})
+ * - Storage: Supabase journal_entries table (one row per user+date)
  */
 
 import React, { useState, useMemo, useCallback } from 'react';

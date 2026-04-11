@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Check, X, Users, Building2, MapPin, Contact } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -19,18 +19,9 @@ const PROVIDERS: Provider[] = [
     { id: 'personal', name: 'Personal Contacts', description: 'Import contacts from your connected accounts', icon: <Users className="w-5 h-5" />, color: 'text-purple-500' },
 ];
 
-const LS_KEY = 'settings-rooms-connected';
-
 export const RoomsSettings: React.FC = () => {
-    const [connected, setConnected] = useState<string[]>(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY);
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return [];
-    });
-
-    useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(connected)); }, [connected]);
+    // Stub UI — connection state is in-memory only
+    const [connected, setConnected] = useState<string[]>([]);
 
     const { toast } = useToast();
 

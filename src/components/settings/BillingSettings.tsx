@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CreditCard, Check, Plus, Receipt, Crown, Zap, ShieldCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -61,28 +61,10 @@ const PlanCard: React.FC<PlanCardProps> = ({ id, name, monthlyPrice, annualPrice
     );
 };
 
-const LS_KEY_PLAN = 'settings-billing-plan';
-const LS_KEY_CYCLE = 'settings-billing-cycle';
-
 export const BillingSettings: React.FC = () => {
-    const [currentPlan, setCurrentPlan] = useState<PlanId>(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY_PLAN);
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return 'professional';
-    });
-
-    const [billingCycle, setBillingCycle] = useState<BillingCycle>(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY_CYCLE);
-            if (stored) return JSON.parse(stored);
-        } catch { /* ignore */ }
-        return 'monthly';
-    });
-
-    useEffect(() => { localStorage.setItem(LS_KEY_PLAN, JSON.stringify(currentPlan)); }, [currentPlan]);
-    useEffect(() => { localStorage.setItem(LS_KEY_CYCLE, JSON.stringify(billingCycle)); }, [billingCycle]);
+    // Stub UI — plan/cycle selection is in-memory only
+    const [currentPlan, setCurrentPlan] = useState<PlanId>('professional');
+    const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
 
     const prices: Record<PlanId, { monthly: number; annual: number }> = {
         starter: { monthly: 0, annual: 0 },

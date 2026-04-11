@@ -32,7 +32,7 @@ export const useDailyJournal = ({
   const isDirtyRef = useRef(false);
 
   // Load journal entry for the current date.
-  // In Supabase mode the service hydrates async — subscribe so this hook
+  // The service hydrates async from Supabase — subscribe so this hook
   // re-renders once the cache fills, then we re-read.
   useEffect(() => {
     let cancelled = false;
@@ -55,8 +55,8 @@ export const useDailyJournal = ({
 
     setIsLoading(true);
 
-    // First try synchronously — for localStorage mode (or already-hydrated
-    // Supabase cache) this returns immediately.
+    // First try synchronously — if the Supabase cache is already hydrated
+    // for this user, this returns immediately.
     const initialEntry = getJournalByDate(date, userId, timeConfig);
     if (initialEntry) {
       if (!initialEntry.urgentTasks) initialEntry.urgentTasks = [];
