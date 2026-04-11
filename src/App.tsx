@@ -12,6 +12,7 @@ import { CalendarProvider } from "./context/CalendarContext";
 import { TaskProvider } from "./context/TaskContext";
 import { NoteProvider } from "./context/NoteContext";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
+import { MigrationBanner } from "./components/MigrationBanner";
 
 // ── Code-split routes (loaded on demand) ────────────────────────────
 const Settings = lazy(() => import("./pages/Settings"));
@@ -41,6 +42,7 @@ function ProtectedLayout() {
     <CalendarProvider>
       <TaskProvider>
         <NoteProvider>
+          <MigrationBanner />
           <Outlet />
         </NoteProvider>
       </TaskProvider>

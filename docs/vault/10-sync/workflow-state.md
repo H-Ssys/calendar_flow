@@ -1,21 +1,54 @@
 ---
 type: workflow-state
-current_workflow: m5-journal-focus-migration
+current_workflow: m6-data-migration-script
 current_step: 1
-feature_name: journal-focus-migration
+feature_name: data-migration-script
 status: complete
-last_updated: 2026-04-12T00:00:00Z
-last_step_summary: "M5 Journal + Focus Timer Migration complete. dailyJournalService dual-mode via in-memory cache + subscribers (preserves sync API for DailyJournalView/useDailyJournal). useFocusTimer dual-mode with debounced upserts. Migration 012 adds metadata JSONB to journal_entries (title, timezone, urgentTasks, attachments) and focus_sessions (live timer state). Build verified ✓"
+last_updated: 2026-04-12T01:00:00Z
+last_step_summary: "M6 Data Migration Script complete. migrationService.ts reads all 12 localStorage keys (settings/events/tasks/notes/journal/focus), transforms via existing v1↔v2 mappers, writes through Supabase services in 6 ordered steps. dataService.ts gains async dual-mode exportAllData/importData/resetAllDataForUser (legacy sync functions preserved). MigrationBanner shows invitation → progress → success/error states. Wired into ProtectedLayout. Build verified ✓"
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m5-journal-focus-migration
-- **Step**: M5 — Complete
-- **Feature**: Daily journal + focus timer migration to Supabase
+- **Workflow**: m6-data-migration-script
+- **Step**: M6 — Complete
+- **Feature**: One-time localStorage → Supabase migration + dual-mode export/import/reset
 - **Status**: complete
+
+## M6 Data Migration Script (2026-04-12)
+| Task | Status | Summary |
+|------|--------|---------|
+| migrationService.ts | done | checkMigrationNeeded, migrateAllData (6 steps), markMigrated, clearMigratedFlag, MigrationProgress + ProgressCallback |
+| Migration order | done | settings → events → tasks → notes → journal → focus (per-item try/catch, partial success allowed) |
+| Migration flag | done | `supabase-migrated-${userId}` localStorage key prevents re-running |
+| dataService.ts | done | New async dual-mode: exportAllData(userId), importData(userId, json), resetAllDataForUser(userId). Legacy sync functions preserved for tests + GeneralSettings |
+| MigrationBanner.tsx | done | 3-state banner: idle invitation → running progress → done success/warnings. Uses Alert + Button + Progress shadcn primitives |
+| App.tsx wiring | done | Mounted inside ProtectedLayout (above Outlet, after providers so AuthContext is available) |
+| Build verified | done | npx vite build → ✓ built in 934ms |
+
+### Migration Flow
+1. User logs in → `ProtectedLayout` mounts → `MigrationBanner` calls `checkMigrationNeeded(userId)`
+2. If localStorage has any of the 12 keys (or any `daily-journal-*` key) AND `supabase-migrated-${userId}` is unset → banner shows invitation
+3. User clicks "Migrate Now" → `migrateAllData(userId, onProgress)` runs sequentially
+4. Each step (settings/events/tasks/notes/journal/focus) wrapped in try/catch, errors collected to `progress.errors`
+5. On completion: `markMigrated(userId)` writes flag → banner shows success or warnings
+6. User clicks "Skip" → flag set immediately, no migration performed
+7. Banner persists until dismissed; reappears next mount only if flag is cleared
+
+### Stub keys NOT migrated
+- `settings-calendar-connected`, `settings-conferencing-connected`, `settings-rooms-connected` — stubs from scan step 2
+- `event-logs` — P2, deferred (not user-facing, grow unbounded)
+
+### Async Dual-Mode dataService API (new)
+| Function | localStorage mode | Supabase mode |
+|----------|-------------------|---------------|
+| `exportAllData(userId)` | Calls legacy `exportAllDataJSON()` | Parallel fetch from events/tasks/notes/journal + settings, mapped via v2→v1 mappers, JSON v2.0 |
+| `importData(userId, json)` | Calls legacy `importAllData()` | Per-row create through Supabase services with try/catch (errors collected, partial success) |
+| `resetAllDataForUser(userId)` | Calls legacy `resetAllData()` | DELETE WHERE user_id on events/tasks/notes/journal_entries/focus_sessions + clear settings JSONB |
+
+Legacy sync functions (`exportAllDataJSON`, `importAllData`, `resetAllData`) untouched — existing tests + `GeneralSettings` continue to work.
 
 ## M5 Journal + Focus Timer Migration (2026-04-12)
 | Task | Status | Summary |
