@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, LayoutPanelLeft, Calendar as CalendarIcon, CalendarCheck2, ListTodo, FileText, CheckCircle2, AlertCircle, Clock, Menu } from 'lucide-react';
+import { Search, Plus, LayoutPanelLeft, Calendar as CalendarIcon, CalendarCheck2, ListTodo, FileText, CheckCircle2, AlertCircle, Clock, Menu, Users, UserPlus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MiniCalendar } from './MiniCalendar';
 import { UserProfile } from './UserProfile';
@@ -23,6 +23,8 @@ export const CalendarSidebar: React.FC = () => {
     { path: '/', label: 'Calendar', icon: CalendarIcon },
     { path: '/tasks', label: 'Event / Task', icon: CalendarCheck2 },
     { path: '/notes', label: 'Notes', icon: FileText },
+    { path: '/contacts', label: 'Smart Contacts', icon: Users },
+    { path: '/teams', label: 'Teams', icon: UserPlus },
   ];
 
   // Task stats

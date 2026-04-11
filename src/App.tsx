@@ -18,6 +18,9 @@ import { MigrationBanner } from "./components/MigrationBanner";
 const Settings = lazy(() => import("./pages/Settings"));
 const EventTask = lazy(() => import("./pages/EventTask"));
 const Notes = lazy(() => import("./pages/Notes"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const Teams = lazy(() => import("./pages/Teams"));
+const JoinPage = lazy(() => import("./pages/JoinPage"));
 
 const queryClient = new QueryClient();
 
@@ -80,7 +83,12 @@ const App = () => (
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/tasks" element={<EventTask />} />
                 <Route path="/notes" element={<Notes />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/teams" element={<Teams />} />
               </Route>
+
+              {/* Public token-based invite */}
+              <Route path="/join/:token" element={<JoinPage />} />
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

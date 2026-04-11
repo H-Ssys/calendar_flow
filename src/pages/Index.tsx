@@ -1,6 +1,6 @@
 import React from 'react';
 import { CalendarSidebar } from '@/components/calendar/CalendarSidebar';
-import { CalendarHeader } from '@/components/calendar/CalendarHeader';
+import { TopActionBar } from '@/components/TopActionBar';
 import { WeeklyView } from '@/components/calendar/WeeklyView';
 import { FloatingNotification } from '@/components/calendar/FloatingNotification';
 import { AddEventForm } from '@/components/calendar/AddEventForm';
@@ -55,7 +55,7 @@ const Index = () => {
       {/* Main Content Area */}
       <main className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
-        <CalendarHeader onAddEvent={() => setIsAddEventOpen(true)} />
+        <TopActionBar onAddEvent={() => setIsAddEventOpen(true)} />
 
         {/* Calendar Views */}
         {currentView === 'daily' ? (
