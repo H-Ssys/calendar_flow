@@ -27,3 +27,9 @@ You are now acting as the Memory Librarian. Maintain the single source of truth 
 - No orphan notes — every note linked to at least one other
 - Registry entries must match actual code (check timestamps)
 - Cost log entry required after every feature ships
+
+## Wikilink Health (run every session)
+1. Check for orphan nodes: files with 0 incoming AND 0 outgoing links
+2. Check for placeholder links: [[adr-NNN]], [[pattern-name]], etc. — replace with real links
+3. Every new vault file must be linked FROM at least 1 existing file within the same commit
+4. Target: zero orphan nodes at all times

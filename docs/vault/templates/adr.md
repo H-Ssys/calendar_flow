@@ -12,7 +12,7 @@ tool_owner: claude-code
 # ADR-{{NNN}}: {{Title}}
 
 ## Status
-{{proposed | accepted | deprecated | superseded by [[adr-NNN]]}}
+{{proposed | accepted | deprecated | superseded by [[adr-010-dual-mode-migration]]}}
 
 ## Context
 What is the issue we're deciding?

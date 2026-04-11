@@ -50,3 +50,17 @@ Check: broken wikilinks, stale registry entries, orphan notes, missing frontmatt
 - Keep entries compact (5-10 lines per file, not 50)
 - Flag files > 500 lines in oversized-files.md
 - Output 5-line summary when done: files scanned, components found, dead code candidates, oversized files, new patterns
+
+## Wikilink Rules (MANDATORY)
+Every vault file you create or update MUST follow these rules:
+1. Every new file MUST contain at least 2 outgoing [[wikilinks]] to existing vault files
+2. After creating a new file, update at least 1 existing file to link back to it
+3. NEVER use placeholder links like [[adr-NNN]] or [[feature-name]] — only link to real files
+4. Standard links every file type should include:
+   - Registry files → [[codebase-scan]], [[patterns]], and related registry files
+   - Feature files → [[components]], [[supabase-tables]], [[api-endpoints]]
+   - Bug reports → [[patterns]], [[components]]
+   - ADRs → [[patterns]], related registry files
+   - Sprint notes → [[workflow-state]], related feature files
+   - Session resumes → [[workflow-state]], [[cost-log]]
+5. After every scan/update, run backlink check: every file must have ≥1 incoming link

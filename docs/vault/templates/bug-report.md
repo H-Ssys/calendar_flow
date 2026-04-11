@@ -38,7 +38,7 @@ What the user sees.
 **Regression Test**: 
 
 ## Pattern
-[[pattern-name]] — category for future prevention
+See [[patterns]] — category for future prevention
 
 ## Related
 - [[patterns]]

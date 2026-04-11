@@ -113,6 +113,9 @@ When an AUTO GATE fails:
 - No VITE_ secrets
 - Update vault after every step
 
+## Vault Linking Rule
+Every vault write (create or update) MUST include [[wikilinks]]. No file is committed without at least 2 outgoing links and 1 incoming backlink. The Memory Librarian verifies this at session end.
+
 ## 10. Role Skill Loading
 When switching roles, read the skill file:
 - `.claude/skills/roles/codebase-scanner.md` (Step 1)
