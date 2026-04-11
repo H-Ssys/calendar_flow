@@ -1,14 +1,17 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import { CalendarProvider } from "./context/CalendarContext";
 import { TaskProvider } from "./context/TaskContext";
 import { NoteProvider } from "./context/NoteContext";
+import { AuthProvider, useAuthContext } from "./context/AuthContext";
 
 // ── Code-split routes (loaded on demand) ────────────────────────────
 const Settings = lazy(() => import("./pages/Settings"));
@@ -27,29 +30,62 @@ const RouteFallback = () => (
   </div>
 );
 
+// ── Auth guard layout ───────────────────────────────────────────────
+function ProtectedLayout() {
+  const { isAuthenticated, loading } = useAuthContext();
+
+  if (loading) return <RouteFallback />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  return (
+    <CalendarProvider>
+      <TaskProvider>
+        <NoteProvider>
+          <Outlet />
+        </NoteProvider>
+      </TaskProvider>
+    </CalendarProvider>
+  );
+}
+
+// ── Public-only route (redirect if already logged in) ───────────────
+function PublicRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, loading } = useAuthContext();
+
+  if (loading) return <RouteFallback />;
+  if (isAuthenticated) return <Navigate to="/" replace />;
+
+  return <>{children}</>;
+}
+
+// ── App ─────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <CalendarProvider>
-        <TaskProvider>
-          <NoteProvider>
-            <BrowserRouter>
-              <Suspense fallback={<RouteFallback />}>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/tasks" element={<EventTask />} />
-                  <Route path="/notes" element={<Notes />} />
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </NoteProvider>
-        </TaskProvider>
-      </CalendarProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              {/* Public auth routes */}
+              <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+              <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+
+              {/* Protected app routes */}
+              <Route element={<ProtectedLayout />}>
+                <Route path="/" element={<Index />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/tasks" element={<EventTask />} />
+                <Route path="/notes" element={<Notes />} />
+              </Route>
+
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </AuthProvider>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
