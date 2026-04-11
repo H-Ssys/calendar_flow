@@ -190,8 +190,21 @@ todayTasks: Task[]               // derived
 - Delegates persistence to `taskService` (`loadTasks`, `saveTasks`, `getTasksByStatus`, `getTasksByDate`, `getOverdueTasks`, `generateTaskId`, `generateSubtaskId`).
 - Sonner toasts on CRUD + move.
 
+### Supabase Dual-Mode (M3, 2026-04-11)
+- **Feature flag**: `VITE_USE_SUPABASE === 'true'` → Supabase mode, otherwise localStorage
+- **Service**: `src/services/supabase/taskSupabaseService.ts` — fetchTasks (joins subtasks), createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask, subscribeToTasks
+- **Type mapper**: `src/utils/taskTypeMapper.ts` — handles status `in-progress`↔`in_progress` and priority `urgent`↔`critical` enum mapping
+- **Migration**: `supabase/migrations/010_task_metadata.sql` — adds `metadata JSONB DEFAULT '{}'` to tasks for v1-only fields
+- **CRUD pattern**: Optimistic local update → async Supabase call → rollback on error
+- **Subtasks**: Real `subtasks` table (FK CASCADE)
+- **Cross-module links**: `linkedEventIds`/`linkedTaskIds` stored in `tasks.metadata` JSONB (linking tables for future)
+- **Activity log**: Stored in `tasks.metadata.activityLog` (task_activity table for future)
+- **Realtime**: subscribeToTasks listens on tasks + subtasks tables, refetches on any change
+- **Undo delete**: Local re-add + Supabase re-create
+- **Metadata cache**: `metadataByTaskId` ref tracks v2 metadata blob per task ID for correct merge on partial updates
+
 ### ⚠ Issues
-- Storage key `ofative-tasks` does NOT match `dataService.ts` (which reads `tasks`). Export/import/reset are broken for tasks — **same bug as notes**.
+- Storage key `ofative-tasks` does NOT match `dataService.ts` (which reads `tasks`). Export/import/reset are broken for tasks — **same bug as notes**. (Fixed in M0 — dataService now reads `ofative-tasks`.)
 
 ---
 

@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { Task, TaskStatus, TaskPriority, TaskActivityEntry, ActivitySource } from '@/types/task';
 import {
     loadTasks, saveTasks, getTasksByStatus, getTasksByDate,
     getOverdueTasks, generateTaskId, generateSubtaskId
 } from '@/services/taskService';
+import * as taskSupabaseService from '@/services/supabase/taskSupabaseService';
+import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/taskTypeMapper';
+import { useAuthContext } from './AuthContext';
 import { toast } from 'sonner';
+
+// ── Feature flag: 'true' → Supabase, anything else → localStorage ──
+const USE_SUPABASE = import.meta.env.VITE_USE_SUPABASE === 'true';
 
 // ========== Context Type ==========
 
@@ -58,14 +64,50 @@ export const useTaskContext = () => {
 // ========== Provider ==========
 
 export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [tasks, setTasks] = useState<Task[]>(() => loadTasks());
+    const { user } = useAuthContext();
+    const userId = user?.id;
+
+    const [tasks, setTasks] = useState<Task[]>(() => {
+        if (USE_SUPABASE) return []; // hydrated async via useEffect
+        return loadTasks();
+    });
     const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
     const [filterPriority, setFilterPriority] = useState<TaskPriority | 'all'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
-    // Persist on change
+    // Track raw v2 metadata per task ID so update mapper can merge correctly
+    const metadataByTaskId = useRef<Record<string, Record<string, unknown>>>({});
+
+    // ── Refetch helper (Supabase mode) ───────────────────────────────
+    const refetchFromSupabase = useCallback(async () => {
+        if (!USE_SUPABASE || !userId) return;
+        try {
+            const { tasks: rows, subtasksByTaskId } = await taskSupabaseService.fetchTasks(userId);
+            metadataByTaskId.current = {};
+            const v1Tasks = rows.map((row) => {
+                metadataByTaskId.current[row.id] = row.metadata ?? {};
+                return mapV2ToV1(row, subtasksByTaskId[row.id] ?? []);
+            });
+            setTasks(v1Tasks);
+        } catch (err) {
+            console.error('[TaskContext] Failed to fetch tasks from Supabase:', err);
+        }
+    }, [userId]);
+
+    // ── Supabase mode: fetch on mount + realtime subscription ────────
     useEffect(() => {
+        if (!USE_SUPABASE || !userId) return;
+        refetchFromSupabase();
+        const unsubscribe = taskSupabaseService.subscribeToTasks(userId, () => {
+            refetchFromSupabase();
+        });
+        return () => { unsubscribe(); };
+    }, [userId, refetchFromSupabase]);
+
+    // ── localStorage mode: persist on change ─────────────────────────
+    useEffect(() => {
+        if (USE_SUPABASE) return;
         saveTasks(tasks);
     }, [tasks]);
 
@@ -100,14 +142,35 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             text: 'Task created',
             source: 'system',
         }];
+
+        // Optimistic local update
         setTasks(prev => [...prev, newTask]);
         toast.success(`Task "${newTask.title}" created`);
+
+        if (USE_SUPABASE && userId) {
+            const v2Task = mapV1ToV2(newTask, userId);
+            const v2Subtasks = newTask.subtasks.map((s, i) => ({
+                id: s.id,
+                title: s.title,
+                is_completed: s.done,
+                sort_order: i,
+            }));
+            taskSupabaseService.createTask(userId, v2Task, v2Subtasks).then(({ task: row }) => {
+                metadataByTaskId.current[row.id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase createTask failed, rolling back:', err);
+                setTasks(prev => prev.filter(t => t.id !== newTask.id));
+            });
+        }
+
         return newTask;
-    }, [tasks]);
+    }, [tasks, userId]);
 
     const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+        let previous: Task | undefined;
         setTasks(prev => prev.map(t => {
             if (t.id !== id) return t;
+            previous = t;
             const updated = { ...t, ...updates, updatedAt: new Date() };
             // Auto-log status changes
             if (updates.status && updates.status !== t.status) {
@@ -121,26 +184,68 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             return updated;
         }));
+
+        if (USE_SUPABASE) {
+            const existingMeta = metadataByTaskId.current[id] ?? {};
+            const v2Updates = mapV1UpdateToV2(updates, existingMeta);
+            taskSupabaseService.updateTask(id, v2Updates).then((row) => {
+                metadataByTaskId.current[id] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase updateTask failed, rolling back:', err);
+                if (previous) {
+                    setTasks(prev => prev.map(t => t.id === id ? previous! : t));
+                }
+            });
+        }
     }, []);
 
     const deleteTask = useCallback((id: string) => {
+        let deleted: Task | undefined;
         setTasks(prev => {
-            const taskToDelete = prev.find(t => t.id === id);
-            if (taskToDelete) {
+            deleted = prev.find(t => t.id === id);
+            if (deleted) {
                 toast.success('Task deleted', {
                     action: {
                         label: 'Undo',
-                        onClick: () => setTasks(p => [...p, taskToDelete]),
+                        onClick: () => {
+                            // Local-only undo for both modes
+                            setTasks(p => [...p, deleted!]);
+                            // In Supabase mode, also re-create the task remotely
+                            if (USE_SUPABASE && userId && deleted) {
+                                const v2Task = mapV1ToV2(deleted, userId);
+                                const v2Subtasks = deleted.subtasks.map((s, i) => ({
+                                    id: s.id,
+                                    title: s.title,
+                                    is_completed: s.done,
+                                    sort_order: i,
+                                }));
+                                taskSupabaseService.createTask(userId, v2Task, v2Subtasks).catch((err) => {
+                                    console.error('[TaskContext] Undo: failed to recreate task in Supabase:', err);
+                                });
+                            }
+                        },
                     },
                     duration: 5000,
                 });
             }
             return prev.filter(t => t.id !== id);
         });
-    }, []);
+
+        if (USE_SUPABASE) {
+            taskSupabaseService.deleteTask(id).then(() => {
+                delete metadataByTaskId.current[id];
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase deleteTask failed, rolling back:', err);
+                if (deleted) {
+                    setTasks(prev => [...prev, deleted!]);
+                }
+            });
+        }
+    }, [userId]);
 
     // Kanban
     const moveTask = useCallback((taskId: string, newStatus: TaskStatus) => {
+        let updatedTask: Task | undefined;
         setTasks(prev => {
             const task = prev.find(t => t.id === taskId);
             if (!task || task.status === newStatus) return prev;
@@ -158,8 +263,26 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 updates.completedAt = undefined;
             }
 
-            return prev.map(t => t.id === taskId ? { ...t, ...updates } : t);
+            return prev.map(t => {
+                if (t.id !== taskId) return t;
+                updatedTask = { ...t, ...updates };
+                return updatedTask;
+            });
         });
+
+        if (USE_SUPABASE && updatedTask) {
+            const existingMeta = metadataByTaskId.current[taskId] ?? {};
+            const v2Updates = mapV1UpdateToV2({
+                status: updatedTask.status,
+                order: updatedTask.order,
+                completedAt: updatedTask.completedAt,
+            }, existingMeta);
+            taskSupabaseService.updateTask(taskId, v2Updates).then((row) => {
+                metadataByTaskId.current[taskId] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase moveTask failed:', err);
+            });
+        }
     }, []);
 
     const reorderTasks = useCallback((status: TaskStatus, taskIds: string[]) => {
@@ -169,29 +292,70 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (newOrder === -1) return t;
             return { ...t, order: newOrder };
         }));
+
+        if (USE_SUPABASE) {
+            // Push order changes for all reordered tasks (best effort)
+            taskIds.forEach((id, newOrder) => {
+                const existingMeta = metadataByTaskId.current[id] ?? {};
+                const v2Updates = mapV1UpdateToV2({ order: newOrder }, existingMeta);
+                taskSupabaseService.updateTask(id, v2Updates).then((row) => {
+                    metadataByTaskId.current[id] = row.metadata ?? {};
+                }).catch((err) => {
+                    console.error('[TaskContext] Supabase reorderTasks failed for', id, err);
+                });
+            });
+        }
     }, []);
 
     // Subtasks
     const addSubtask = useCallback((taskId: string, title: string) => {
+        const subtaskId = generateSubtaskId();
+        let nextSortOrder = 0;
         setTasks(prev => prev.map(t => {
             if (t.id !== taskId) return t;
+            nextSortOrder = t.subtasks.length;
             return {
                 ...t,
-                subtasks: [...t.subtasks, { id: generateSubtaskId(), title, done: false }],
+                subtasks: [...t.subtasks, { id: subtaskId, title, done: false }],
                 updatedAt: new Date(),
             };
         }));
+
+        if (USE_SUPABASE) {
+            taskSupabaseService.createSubtask(taskId, {
+                id: subtaskId,
+                title,
+                is_completed: false,
+                sort_order: nextSortOrder,
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase createSubtask failed, rolling back:', err);
+                setTasks(prev => prev.map(t => t.id === taskId
+                    ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subtaskId) }
+                    : t));
+            });
+        }
     }, []);
 
     const toggleSubtask = useCallback((taskId: string, subtaskId: string) => {
+        let nextDone = false;
         setTasks(prev => prev.map(t => {
             if (t.id !== taskId) return t;
             return {
                 ...t,
-                subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, done: !st.done } : st),
+                subtasks: t.subtasks.map(st => {
+                    if (st.id !== subtaskId) return st;
+                    nextDone = !st.done;
+                    return { ...st, done: nextDone };
+                }),
                 updatedAt: new Date(),
             };
         }));
+
+        if (USE_SUPABASE) {
+            taskSupabaseService.updateSubtask(subtaskId, { is_completed: nextDone }).catch((err) => {
+                console.error('[TaskContext] Supabase toggleSubtask failed:', err);
+            });
+        }
     }, []);
 
     const deleteSubtask = useCallback((taskId: string, subtaskId: string) => {
@@ -203,10 +367,17 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 updatedAt: new Date(),
             };
         }));
+
+        if (USE_SUPABASE) {
+            taskSupabaseService.deleteSubtask(subtaskId).catch((err) => {
+                console.error('[TaskContext] Supabase deleteSubtask failed:', err);
+            });
+        }
     }, []);
 
     // Activity Log
     const addActivityLogEntry = useCallback((taskId: string, text: string, source: ActivitySource) => {
+        let newLog: TaskActivityEntry[] | undefined;
         setTasks(prev => prev.map(t => {
             if (t.id !== taskId) return t;
             const entry: TaskActivityEntry = {
@@ -215,12 +386,23 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 text,
                 source,
             };
+            newLog = [...(t.activityLog || []), entry];
             return {
                 ...t,
-                activityLog: [...(t.activityLog || []), entry],
+                activityLog: newLog,
                 updatedAt: new Date(),
             };
         }));
+
+        if (USE_SUPABASE && newLog) {
+            const existingMeta = metadataByTaskId.current[taskId] ?? {};
+            const v2Updates = mapV1UpdateToV2({ activityLog: newLog }, existingMeta);
+            taskSupabaseService.updateTask(taskId, v2Updates).then((row) => {
+                metadataByTaskId.current[taskId] = row.metadata ?? {};
+            }).catch((err) => {
+                console.error('[TaskContext] Supabase addActivityLogEntry failed:', err);
+            });
+        }
     }, []);
 
     // Queries

@@ -1,21 +1,59 @@
 ---
 type: workflow-state
-current_workflow: m2b-settings-migration
+current_workflow: m3-tasks-migration
 current_step: 1
-feature_name: settings-migration
+feature_name: tasks-migration
 status: complete
-last_updated: 2026-04-11T21:00:00Z
-last_step_summary: "M2b Settings Migration complete. 8 CalendarContext localStorage keys migrated to Supabase profiles.settings JSONB (7 keys) + profiles columns (display_name, timezone, language, theme). Migration 009 adds settings JSONB column. Debounced 300ms writes prevent rapid saves. Event-logs skipped (P2 — localStorage only). No settings UI components modified."
+last_updated: 2026-04-11T22:00:00Z
+last_step_summary: "M3 Tasks Migration complete. TaskContext dual-mode: VITE_USE_SUPABASE='true' → tasks/subtasks tables + realtime, otherwise localStorage. Migration 010 adds tasks.metadata JSONB for v1-only fields (linkedEventIds, actualResult, lessonsLearned, category, color, order, activityLog). Status 'in-progress' ↔ 'in_progress' and priority 'urgent' ↔ 'critical' enum mapping. Subtasks use real subtasks table. Build verified ✓"
 retry_count: 0
 ---
 
 # Workflow State
 
 ## Current
-- **Workflow**: m2b-settings-migration
-- **Step**: M2b — Complete
-- **Feature**: CalendarContext settings migration to Supabase
+- **Workflow**: m3-tasks-migration
+- **Step**: M3 — Complete
+- **Feature**: TaskContext migration to Supabase
 - **Status**: complete
+
+## M3 Tasks Migration (2026-04-11)
+| Task | Status | Summary |
+|------|--------|---------|
+| Migration 010 | done | ALTER TABLE tasks ADD COLUMN metadata JSONB DEFAULT '{}' |
+| taskTypeMapper.ts | done | mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 + status/priority enum mapping |
+| taskSupabaseService.ts | done | fetchTasks (joins subtasks), createTask, updateTask, deleteTask, createSubtask, updateSubtask, deleteSubtask, subscribeToTasks |
+| TaskContext.tsx | done | Dual-mode: addTask, updateTask, deleteTask, moveTask, reorderTasks, addSubtask, toggleSubtask, deleteSubtask, addActivityLogEntry |
+| Optimistic updates | done | All CRUD ops update local state immediately, rollback on error |
+| Undo (deleteTask) | done | Local re-add + Supabase re-create on undo click |
+| Build verified | done | npx vite build → ✓ built in 924ms |
+
+### Type Mismatches (v1 Task ↔ v2 tasks table)
+| v1 Field | v2 Column | Mapping |
+|----------|-----------|---------|
+| status: 'in-progress' | status: 'in_progress' | **HYPHEN ↔ UNDERSCORE** |
+| priority: 'urgent' | priority: 'critical' | **RENAME** |
+| dueDate: Date | due_date: string | Date ↔ ISO string |
+| createdAt/updatedAt: Date | created_at/updated_at: string | Date ↔ ISO string |
+| completedAt: Date | completed_at: string | Date ↔ ISO string |
+| outcomeEmoji | outcome_emoji | Direct |
+| outcomeRating | outcome_rating | Direct |
+| timeSpent | time_spent | Direct |
+| scheduledDate/scheduledSlotId | scheduled_date/scheduled_slot_id | Direct |
+| tags[] | tags[] | Direct |
+| **v1-only fields → tasks.metadata JSONB** | | |
+| actualResult | metadata.actualResult | JSONB |
+| lessonsLearned | metadata.lessonsLearned | JSONB |
+| category | metadata.category | JSONB |
+| color | metadata.color | JSONB |
+| order | metadata.order | JSONB |
+| linkedEventIds | metadata.linkedEventIds | JSONB (linking tables future work) |
+| linkedTaskIds | metadata.linkedTaskIds | JSONB |
+| activityLog[] | metadata.activityLog | JSONB (task_activity table future work) |
+| **v1 cancelled** | v2 'cancelled' | v1 has no cancelled; v2 cancelled → falls back to 'todo' on read |
+| **Subtasks** | | |
+| subtasks[] inline | subtasks table | Separate table; FK ON DELETE CASCADE |
+| Subtask.done | subtasks.is_completed | Field rename |
 
 ## M2b Settings Migration (2026-04-11)
 | Task | Status | Summary |
