@@ -497,3 +497,63 @@ Shadcn/ui primitives — standard Radix wrappers with Flow theme tokens. Do not 
 - **Supabase/service coupling:** 1 file (`GeneralSettings` via `dataService`)
 - **Duplication candidates:** Daily vs WorkingHours, Weekly vs FlexibleEvents, Monthly vs FocusGuard, Yearly vs SchedulingLinks, calendar/EventCard vs events/EventCard, AddEventForm vs EventCreateDialog
 - **Stub/demo data to wire:** `UserProfile` (hardcoded AW), `FloatingNotification` (hardcoded demo), `AddParticipantCard` (MOCK_USERS), all *Connect* settings stubs (no OAuth)
+
+---
+
+## Pages (`src/pages/`)
+
+Route configuration lives in `src/App.tsx`. All pages share the same provider tree: `QueryClientProvider → TooltipProvider → Toaster (shadcn) + Sonner → CalendarProvider → TaskProvider → NoteProvider → BrowserRouter`. `Settings`, `EventTask`, and `Notes` are **lazy-loaded** via `React.lazy`; `Index` and `NotFound` are eager.
+
+| Route | Element | File | Lazy |
+|---|---|---|---|
+| `/` | `Index` | `src/pages/Index.tsx` | eager |
+| `/settings` | `Settings` | `src/pages/Settings.tsx` | lazy |
+| `/tasks` | `EventTask` | `src/pages/EventTask.tsx` | lazy |
+| `/notes` | `Notes` | `src/pages/Notes.tsx` | lazy |
+| `*` | `NotFound` | `src/pages/NotFound.tsx` | eager |
+
+### Index (`src/pages/Index.tsx`)
+- **Size**: 3.4 KB | **Lines**: 104 | **Route**: `/`
+- **Purpose**: Main calendar shell — routes between `DailyView` / `DailyJournalView` / `WeeklyView` / `MonthlyView` / `YearlyView` based on `currentView` + `dailyViewVariant` from `CalendarContext`.
+- **Renders**: `CalendarSidebar` + main area with `CalendarHeader` and the active view; `FloatingNotification`, `FocusMode`, and `AddEventForm` (as right-sidebar overlay when `isAddEventOpen`).
+- **Hooks**: `useCalendar`, `useCalendarKeyboard(onNewEvent)` (**confirmed wired**), `useIsMobile`.
+- **State**: `isAddEventOpen`, `selectedEvent`, `prefillEvent` (local).
+- **Layout**: `flex h-screen` → sidebar + `<main>` column; add-event panel renders in a fixed overlay (`absolute inset-0 bg-black/20 z-50 flex justify-end`).
+- **Patterns**: Imports `Event as CalendarEvent` alias (only place the alias exists).
+
+### EventTask (`src/pages/EventTask.tsx`)
+- **Size**: 3.9 KB | **Lines**: 117 | **Route**: `/tasks` (yes — `/tasks` → EventTask, not Tasks)
+- **Purpose**: Combined Events-and-Tasks page with tab switcher (`'events' | 'tasks'`).
+- **Renders**:
+  - Shared: `CalendarSidebar`, tab header (`CalendarCheck2` / `ListTodo` icons).
+  - `events` tab → `EventPage`.
+  - `tasks` tab → `TaskHeader` + (`TaskBoard` | `TaskList` by `viewMode`) + `ActivityDashboard`; opens `TaskDetail` for selection.
+- **Hooks**: `useTaskContext`.
+- **State**: `activeTab`, `selectedTaskId` (local).
+- **Layout**: Sidebar + main column; right-side drawer for `TaskDetail`.
+
+### Notes (`src/pages/Notes.tsx`)
+- **Size**: 2.4 KB | **Lines**: 75 | **Route**: `/notes`
+- **Purpose**: Two-pane note app — list on the left, editor on the right. Mobile: swaps to single pane with back button.
+- **Renders**: `CalendarSidebar` + `NoteList` + `NoteEditor` (or empty-state card).
+- **Hooks**: `useNoteContext`, `useIsMobile`.
+- **Layout**: `flex h-screen`; mobile uses conditional render to show list OR editor, not both.
+
+### Settings (`src/pages/Settings.tsx`)
+- **Size**: 2.5 KB | **Lines**: 69 | **Route**: `/settings`
+- **Purpose**: Settings shell — left `SettingsSidebar` drives a `switch(activeTab)` that renders one of: `GeneralSettings`, `MenuBarSettings`, `SmartColorCodingSettings`, `CalendarSettings`, `RoomsSettings`, `ConferencingSettings`, `DailySettings`, `WeeklySettings`, `MonthlySettings`, `YearlySettings`, `ProfileSettings`, `EmailSettings`, `BillingSettings`.
+- **State**: `activeTab` (local, default `'general'`).
+- **Patterns**: Plain switch statement, no nested routes.
+- **⚠ Note**: `SettingsSidebar` references tabs like `daily-settings`, `weekly-settings` — verify those cases match the switch (likely OK, quick QA item).
+
+### NotFound (`src/pages/NotFound.tsx`)
+- **Size**: 0.7 KB | **Lines**: 24 | **Route**: `*`
+- **Purpose**: 404 screen. Logs the attempted path via `console.error` on mount.
+- **Renders**: Centered 404 + "Return to Home" anchor.
+- **Hooks**: `useLocation`.
+
+### ⚠ Tasks.tsx — DEAD CODE
+- **File**: `src/pages/Tasks.tsx` (80 lines)
+- **Status**: **Not referenced by `App.tsx`** — the `/tasks` route is wired to `EventTask.tsx` instead. This file is orphaned.
+- **Additional bug**: Its `addTask()` call passes `{ title, description, status, priority, linkedEventIds, tags, category, color, subtasks }` — **missing `linkedTaskIds`, `activityLog`, `actualResult`** required by the `Task` interface. Would fail TS strict build if re-enabled.
+- **Action**: Delete `src/pages/Tasks.tsx` — added to dead-code candidates.
