@@ -14,101 +14,12 @@ import {
     differenceInMinutes,
     setHours,
     setMinutes,
-    addMinutes
 } from 'date-fns';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from '@dnd-kit/core';
+import { Copy, Save, ChevronDown, Plus, Check, X, Circle } from 'lucide-react';
 
-interface DailyViewProps {
-    onEventClick?: (event: Event) => void;
-}
-
-// ── Collision Detection ─────────────────────────────────────────────
-// Greedy column assignment for overlapping events
-interface EventColumn {
-    column: number;
-    totalColumns: number;
-}
-
-function calculateEventColumns(events: Event[]): Map<string, EventColumn> {
-    const result = new Map<string, EventColumn>();
-    if (events.length === 0) return result;
-
-    // Sort by start time, then by duration (longer first)
-    const sorted = [...events].sort((a, b) => {
-        const diff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-        if (diff !== 0) return diff;
-        // Longer events first
-        return differenceInMinutes(new Date(b.endTime), new Date(b.startTime))
-            - differenceInMinutes(new Date(a.endTime), new Date(a.startTime));
-    });
-
-    // Build overlap groups: events that are transitively connected through overlaps
-    const groups: Event[][] = [];
-    const visited = new Set<string>();
-
-    for (const event of sorted) {
-        if (visited.has(event.id)) continue;
-
-        const group: Event[] = [];
-        const queue = [event];
-        visited.add(event.id);
-
-        while (queue.length > 0) {
-            const current = queue.shift()!;
-            group.push(current);
-
-            for (const other of sorted) {
-                if (visited.has(other.id)) continue;
-                // Check if any event in the group overlaps with other
-                const overlaps = group.some(g => eventsOverlap(g, other));
-                if (overlaps) {
-                    visited.add(other.id);
-                    queue.push(other);
-                }
-            }
-        }
-        groups.push(group);
-    }
-
-    // Assign columns within each group
-    for (const group of groups) {
-        // Sort group by start time
-        group.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-
-        const columnEnds: number[] = []; // Track end time of each column
-
-        for (const event of group) {
-            const eventStart = new Date(event.startTime).getTime();
-
-            // Find first column where event fits (doesn't overlap)
-            let assignedCol = -1;
-            for (let col = 0; col < columnEnds.length; col++) {
-                if (columnEnds[col] <= eventStart) {
-                    assignedCol = col;
-                    break;
-                }
-            }
-
-            if (assignedCol === -1) {
-                // Need a new column
-                assignedCol = columnEnds.length;
-                columnEnds.push(0);
-            }
-
-            columnEnds[assignedCol] = new Date(event.endTime).getTime();
-            result.set(event.id, { column: assignedCol, totalColumns: 0 });
-        }
-
-        // Set totalColumns for all events in this group
-        const totalCols = columnEnds.length;
-        for (const event of group) {
-            const col = result.get(event.id)!;
-            col.totalColumns = totalCols;
-        }
-    }
-
-    return result;
-}
+// ── Overlap detection ─────────────────────────────────────────────────
+interface EventColumn { column: number; totalColumns: number; }
 
 function eventsOverlap(a: Event, b: Event): boolean {
     const aStart = new Date(a.startTime).getTime();
@@ -118,233 +29,229 @@ function eventsOverlap(a: Event, b: Event): boolean {
     return aStart < bEnd && bStart < aEnd;
 }
 
-// ── Component ───────────────────────────────────────────────────────
+function calculateEventColumns(events: Event[]): Map<string, EventColumn> {
+    const result = new Map<string, EventColumn>();
+    if (!events.length) return result;
+    const sorted = [...events].sort((a, b) => {
+        const d = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+        return d !== 0 ? d :
+            differenceInMinutes(new Date(b.endTime), new Date(b.startTime)) -
+            differenceInMinutes(new Date(a.endTime), new Date(a.startTime));
+    });
+    const groups: Event[][] = [];
+    const visited = new Set<string>();
+    for (const ev of sorted) {
+        if (visited.has(ev.id)) continue;
+        const group: Event[] = [];
+        const queue = [ev];
+        visited.add(ev.id);
+        while (queue.length) {
+            const cur = queue.shift()!;
+            group.push(cur);
+            for (const other of sorted) {
+                if (visited.has(other.id)) continue;
+                if (group.some(g => eventsOverlap(g, other))) {
+                    visited.add(other.id);
+                    queue.push(other);
+                }
+            }
+        }
+        groups.push(group);
+    }
+    for (const group of groups) {
+        group.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        const ends: number[] = [];
+        for (const ev of group) {
+            const start = new Date(ev.startTime).getTime();
+            let col = ends.findIndex(e => e <= start);
+            if (col === -1) col = ends.length, ends.push(0);
+            ends[col] = new Date(ev.endTime).getTime();
+            result.set(ev.id, { column: col, totalColumns: 0 });
+        }
+        for (const ev of group) result.get(ev.id)!.totalColumns = ends.length;
+    }
+    return result;
+}
+
+// ── Journal row data ──────────────────────────────────────────────────
+interface JournalRow {
+    time: string;   // "06:00"
+    hour: number;
+    taskEvent: string;
+    actual: string;
+}
+
+// ── Component ─────────────────────────────────────────────────────────
+interface DailyViewProps { onEventClick?: (event: Event) => void; }
+
 export const DailyView = ({ onEventClick }: DailyViewProps) => {
-    const { events, currentDate, updateEvent, dailyTimeConfig, getCategoryColor } = useCalendar();
+    const { events, currentDate, updateEvent, dailyTimeConfig, getCategoryColor, setPopoverState, dailyViewVariant } = useCalendar();
     const [activeId, setActiveId] = useState<string | null>(null);
 
-    // ── Filter events for current day ───────────────────────────────
+    // Journal state
+    const [journalTitle, setJournalTitle] = useState('Dreams and Hopes for This Year');
+    const [monthGoal, setMonthGoal] = useState('');
+    const [todayGoal, setTodayGoal] = useState('');
+    const [result, setResult] = useState('');
+    const [actualResults, setActualResults] = useState<Record<string, string>>({});
+
+    // ── Filter events ─────────────────────────────────────────────────
     const dailyEvents = useMemo(() => {
         const dayStart = startOfDay(currentDate);
-        return events.filter(event => {
-            const eventStart = startOfDay(new Date(event.startTime));
-            const eventEnd = endOfDay(new Date(event.endTime));
-            return isWithinInterval(dayStart, { start: eventStart, end: eventEnd });
+        return events.filter(ev => {
+            const s = startOfDay(new Date(ev.startTime));
+            const e = endOfDay(new Date(ev.endTime));
+            return isWithinInterval(dayStart, { start: s, end: e });
         });
     }, [events, currentDate]);
 
     const allDayEvents = dailyEvents.filter(e => e.isAllDay || isMultiDayEvent(e));
-    const timedEvents = dailyEvents.filter(e => !e.isAllDay && !isMultiDayEvent(e));
+    const timedEvents  = dailyEvents.filter(e => !e.isAllDay && !isMultiDayEvent(e));
 
-    // ── B: Dynamic Timeline Extension ───────────────────────────────
+    // ── Timeline bounds ───────────────────────────────────────────────
     const { timelineStartHour, timelineEndHour } = useMemo(() => {
-        let minHour = dailyTimeConfig.startHour;
-        let maxHour = dailyTimeConfig.endHour;
-
-        for (const event of timedEvents) {
-            const s = new Date(event.startTime);
-            const e = new Date(event.endTime);
-            const sh = s.getHours() + (s.getMinutes() > 0 ? 0 : 0);
+        let min = dailyTimeConfig.startHour, max = dailyTimeConfig.endHour;
+        for (const ev of timedEvents) {
+            const s = new Date(ev.startTime), e = new Date(ev.endTime);
+            if (s.getHours() < min) min = s.getHours();
             const eh = e.getHours() + (e.getMinutes() > 0 ? 1 : 0);
-            if (sh < minHour) minHour = sh;
-            if (eh > maxHour) maxHour = eh;
+            if (eh > max) max = eh;
         }
-
-        return { timelineStartHour: minHour, timelineEndHour: Math.min(maxHour, 24) };
+        return { timelineStartHour: min, timelineEndHour: Math.min(max, 24) };
     }, [timedEvents, dailyTimeConfig]);
 
-    const HOUR_HEIGHT_PX = 128;
+    const HOUR_HEIGHT_PX = 100;
     const totalHours = timelineEndHour - timelineStartHour;
-
     const hours = useMemo(() =>
         Array.from({ length: totalHours }, (_, i) => {
-            const hour = i + timelineStartHour;
-            return `${hour.toString().padStart(2, '0')}:00`;
+            const h = i + timelineStartHour;
+            return { label: `${String(h).padStart(2, '0')}:00`, hour: h };
         }),
         [totalHours, timelineStartHour]);
 
-    // ── A: Collision Detection ──────────────────────────────────────
     const eventColumns = useMemo(() => calculateEventColumns(timedEvents), [timedEvents]);
 
-    // ── Positioning ─────────────────────────────────────────────────
     const getEventStyle = (event: Event) => {
-        const eventStart = new Date(event.startTime);
-        const eventEnd = new Date(event.endTime);
-
-        const startH = eventStart.getHours();
-        const startM = eventStart.getMinutes();
-        const minutesFromStart = (startH - timelineStartHour) * 60 + startM;
-        const topPx = (minutesFromStart / 60) * HOUR_HEIGHT_PX;
-
-        const durationMin = differenceInMinutes(eventEnd, eventStart);
-        const heightPx = Math.max((durationMin / 60) * HOUR_HEIGHT_PX, 24); // min 24px
-
-        // Collision column info
+        const s = new Date(event.startTime), e = new Date(event.endTime);
+        const top = ((s.getHours() - timelineStartHour) * 60 + s.getMinutes()) / 60 * HOUR_HEIGHT_PX;
+        const height = Math.max(differenceInMinutes(e, s) / 60 * HOUR_HEIGHT_PX, 20);
         const col = eventColumns.get(event.id) ?? { column: 0, totalColumns: 1 };
-        const widthPct = 100 / col.totalColumns;
-        const leftPct = (col.column / col.totalColumns) * 100;
-
         return {
-            top: `${topPx}px`,
-            height: `${heightPx}px`,
-            left: `${leftPct}%`,
-            width: `calc(${widthPct}% - 4px)`,
+            top: `${top}px`,
+            height: `${height}px`,
+            left: `${col.column / col.totalColumns * 100}%`,
+            width: `calc(${100 / col.totalColumns}% - 4px)`,
         };
     };
 
-    // ── C: Drag & Drop Handlers ─────────────────────────────────────
-    const SNAP_MINUTES = 15;
-
-    const handleDragStart = (e: DragStartEvent) => {
-        setActiveId(String(e.active.id));
-    };
-
+    // ── Drag handlers ─────────────────────────────────────────────────
+    const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
     const handleDragEnd = (e: DragEndEvent) => {
         setActiveId(null);
         const { active, over } = e;
         if (!over) return;
-
         const eventId = String(active.id).replace('daily-event-', '');
-        const event = events.find(ev => ev.id === eventId);
-        if (!event) return;
-
-        const overId = String(over.id);
-
-        // Parse drop target: "daily-slot-HH-MM"
-        const slotMatch = overId.match(/^daily-slot-(\d+)-(\d+)$/);
-        if (!slotMatch) return;
-
-        const newHour = parseInt(slotMatch[1], 10);
-        const newMinute = parseInt(slotMatch[2], 10);
-
-        const oldStart = new Date(event.startTime);
-        const oldEnd = new Date(event.endTime);
-        const durationMs = oldEnd.getTime() - oldStart.getTime();
-
-        const newStart = setMinutes(setHours(new Date(currentDate), newHour), newMinute);
-        newStart.setSeconds(0, 0);
-        const newEnd = new Date(newStart.getTime() + durationMs);
-
-        updateEvent(eventId, {
-            startTime: newStart,
-            endTime: newEnd,
-        });
+        const ev = events.find(x => x.id === eventId);
+        if (!ev) return;
+        const m = String(over.id).match(/^daily-slot-(\d+)-(\d+)$/);
+        if (!m) return;
+        const ns = setMinutes(setHours(new Date(currentDate), +m[1]), +m[2]);
+        ns.setSeconds(0, 0);
+        const dur = new Date(ev.endTime).getTime() - new Date(ev.startTime).getTime();
+        updateEvent(eventId, { startTime: ns, endTime: new Date(ns.getTime() + dur) });
     };
 
-    const activeEvent = activeId
-        ? events.find(ev => `daily-event-${ev.id}` === activeId)
-        : null;
+    const activeEvent = activeId ? events.find(ev => `daily-event-${ev.id}` === activeId) : null;
 
-    // ── Render ──────────────────────────────────────────────────────
+    // ── Now: figure out which panel to show ──────────────────────────
+    const isJournal = dailyViewVariant === 'journal';
+
+    if (isJournal) {
+        return <JournalView
+            currentDate={currentDate}
+            timedEvents={timedEvents}
+            journalTitle={journalTitle} setJournalTitle={setJournalTitle}
+            monthGoal={monthGoal} setMonthGoal={setMonthGoal}
+            todayGoal={todayGoal} setTodayGoal={setTodayGoal}
+            result={result} setResult={setResult}
+            actualResults={actualResults} setActualResults={setActualResults}
+            hours={hours}
+            setPopoverState={setPopoverState}
+        />;
+    }
+
+    // ── Timeline view ─────────────────────────────────────────────────
     return (
         <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
             <div className="flex flex-1 overflow-hidden bg-background h-full">
-                {/* Left Pane: Calendar Timeline (60% width) */}
-                <div className="flex-1 flex flex-col border-r border-border min-w-[60%]">
-                    {/* Header */}
-                    <div className="h-10 border-b border-border flex items-center justify-between px-4 bg-background z-10">
-                        <h2 className="text-lg font-semibold text-foreground">
-                            {format(currentDate, 'd MMMM')} <span className="text-red-500">{format(currentDate, 'yyyy')}</span>
+                {/* Timeline column */}
+                <div className="flex-1 flex flex-col border-r border-border">
+                    {/* Header row */}
+                    <div className="h-10 border-b border-border flex items-center justify-between px-4 bg-background shrink-0">
+                        <h2 className="text-sm font-semibold text-foreground">
+                            {format(currentDate, 'EEEE, d MMMM yyyy')}
                         </h2>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{timedEvents.length} events</span>
-                            <span>•</span>
-                            <span>{timelineStartHour}:00 – {timelineEndHour}:00</span>
-                        </div>
+                        <span className="text-xs text-muted-foreground">{timedEvents.length} events</span>
                     </div>
 
-                    {/* All-day / Multi-day Events Section */}
+                    {/* All-day strip */}
                     {allDayEvents.length > 0 && (
-                        <div className="border-b border-border bg-muted/30 min-h-[3rem] max-h-[10rem] overflow-y-auto">
-                            <div className="p-2 space-y-1.5">
-                                {allDayEvents.map(event => {
-                                    const eventStart = new Date(event.startTime);
-                                    const eventEnd = new Date(event.endTime);
-                                    const isMultiDay = isMultiDayEvent(event);
-                                    const durationDays = isMultiDay ? differenceInDays(eventEnd, eventStart) + 1 : 1;
-                                    const startsBeforeToday = startOfDay(eventStart) < startOfDay(currentDate);
-                                    const endsAfterToday = startOfDay(eventEnd) > startOfDay(currentDate);
-
-                                    return (
-                                        <div
-                                            key={event.id}
-                                            onClick={() => onEventClick?.(event)}
-                                            className="flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-all hover:shadow-md hover:scale-[1.01]"
-                                            style={{ backgroundColor: getCategoryColor(event.category, event.color) }}
-                                        >
-                                            {startsBeforeToday && <span className="text-sm text-gray-700 flex-shrink-0">←</span>}
-                                            <span className="text-base flex-shrink-0">{event.emoji}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-gray-800 truncate">{event.title}</div>
-                                                {isMultiDay && (
-                                                    <div className="text-xs text-gray-600">
-                                                        {format(eventStart, 'MMM d')} – {format(eventEnd, 'MMM d')} ({durationDays} days)
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {endsAfterToday && <span className="text-sm text-gray-700 flex-shrink-0">→</span>}
-                                            {event.isAllDay && !isMultiDay && (
-                                                <span className="text-xs px-2 py-0.5 bg-gray-700/20 rounded-full text-gray-800 flex-shrink-0">All day</span>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                        <div className="border-b border-border bg-muted/30 px-4 py-1.5 flex flex-wrap gap-1.5 shrink-0">
+                            {allDayEvents.map(ev => (
+                                <div
+                                    key={ev.id}
+                                    onClick={() => onEventClick?.(ev)}
+                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium cursor-pointer"
+                                    style={{ backgroundColor: getCategoryColor(ev.category, ev.color) }}
+                                >
+                                    {ev.emoji && <span>{ev.emoji}</span>}
+                                    <span className="text-gray-800 truncate max-w-[160px]">{ev.title}</span>
+                                </div>
+                            ))}
                         </div>
                     )}
 
-                    {/* Scrollable Timeline */}
-                    <div className="flex-1 overflow-y-auto no-scrollbar relative bg-background">
-                        <div className="flex flex-col relative min-h-full">
-                            {/* Hour grid rows + drop zones */}
-                            {hours.map((time, hourIndex) => {
-                                const hour = hourIndex + timelineStartHour;
-                                const showLabel = hourIndex % dailyTimeConfig.hourInterval === 0;
-                                return (
-                                    <div key={time} className={`flex last:border-b-0 relative group ${showLabel ? 'border-b border-border' : 'border-b border-border/30'}`} style={{ height: `${HOUR_HEIGHT_PX}px` }}>
-                                        {/* Time Label */}
-                                        <div className="w-16 flex-shrink-0 flex justify-center pt-2 border-r border-border bg-background z-10 sticky left-0 group-hover:bg-muted/30 transition-colors">
-                                            {showLabel && (
-                                                <span className="text-[10px] font-medium text-muted-foreground">{time}</span>
-                                            )}
-                                        </div>
-
-                                        {/* 4 × 15-min drop zones per hour */}
-                                        <div className="flex-1 relative flex flex-col">
-                                            {[0, 15, 30, 45].map(minute => (
-                                                <DroppableTimeSlot
-                                                    key={`${hour}-${minute}`}
-                                                    id={`daily-slot-${hour}-${minute}`}
-                                                    className="flex-1 border-b border-border/10 last:border-b-0 transition-colors"
-                                                />
-                                            ))}
-                                            {/* Half-hour line */}
-                                            <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-border/30 border-dashed border-t border-border/30 w-full pointer-events-none" />
-                                        </div>
+                    {/* Scrollable grid */}
+                    <div className="flex-1 overflow-y-auto relative bg-background">
+                        <div className="relative" style={{ height: `${totalHours * HOUR_HEIGHT_PX}px` }}>
+                            {/* Hour rows */}
+                            {hours.map(({ label, hour }, i) => (
+                                <div key={label} className="absolute left-0 right-0 flex" style={{ top: `${i * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}>
+                                    {/* Time label */}
+                                    <div className="w-16 shrink-0 border-r border-border px-2 pt-1.5">
+                                        <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
                                     </div>
-                                );
-                            })}
+                                    {/* Drop zones */}
+                                    <div className="flex-1 relative flex flex-col border-b border-border">
+                                        {[0, 15, 30, 45].map(min => (
+                                            <DroppableTimeSlot
+                                                key={min}
+                                                id={`daily-slot-${hour}-${min}`}
+                                                className="flex-1 hover:bg-primary/5 cursor-pointer transition-colors"
+                                                onClick={(e: React.MouseEvent) => {
+                                                    const d = new Date(currentDate);
+                                                    d.setHours(hour, min, 0, 0);
+                                                    setPopoverState({ type: 'menu', x: e.clientX, y: e.clientY, date: d });
+                                                }}
+                                            />
+                                        ))}
+                                        {/* Half-hour dashed line */}
+                                        <div className="absolute top-1/2 left-0 right-0 h-px border-t border-dashed border-border/40 pointer-events-none" />
+                                    </div>
+                                </div>
+                            ))}
 
-                            {/* Timed Events Overlay */}
+                            {/* Events overlay */}
                             <div className="absolute inset-0 left-16 pointer-events-none">
-                                {timedEvents.map(event => {
-                                    const style = getEventStyle(event);
-
+                                {timedEvents.map(ev => {
+                                    const style = getEventStyle(ev);
                                     return (
                                         <DraggableDailyEvent
-                                            key={event.id}
-                                            event={event}
-                                            style={{
-                                                position: 'absolute',
-                                                top: style.top,
-                                                height: style.height,
-                                                left: style.left,
-                                                width: style.width,
-                                                zIndex: 10,
-                                            }}
+                                            key={ev.id} event={ev}
+                                            style={{ position: 'absolute', ...style, zIndex: 10 }}
                                         >
-                                            <div className="h-full rounded-lg overflow-hidden pointer-events-auto">
-                                                <EventCard event={event} onClick={() => onEventClick?.(event)} />
+                                            <div className="h-full rounded-md overflow-hidden pointer-events-auto">
+                                                <EventCard event={ev} onClick={() => onEventClick?.(ev)} />
                                             </div>
                                         </DraggableDailyEvent>
                                     );
@@ -354,35 +261,209 @@ export const DailyView = ({ onEventClick }: DailyViewProps) => {
                     </div>
                 </div>
 
-                {/* Right Pane: Journal / Notes (40% width) */}
-                <div className="w-[40%] flex flex-col bg-card/30">
-                    <div className="h-10 border-b border-border" />
-                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                        <div className="w-24 h-24 mb-4 text-muted-foreground/20">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                <line x1="16" y1="2" x2="16" y2="6" />
-                                <line x1="8" y1="2" x2="8" y2="6" />
-                                <line x1="3" y1="10" x2="21" y2="10" />
-                                <path d="M8 14h.01" />
-                                <path d="M12 14h.01" />
-                                <path d="M16 14h.01" />
-                            </svg>
-                        </div>
-                        <h3 className="text-lg font-medium text-muted-foreground">No Items Today</h3>
-                        <p className="text-sm text-muted-foreground/70">Enjoy your day!</p>
+                {/* Right pane — tasks list placeholder */}
+                <div className="w-72 shrink-0 flex flex-col bg-card/20 border-l border-border">
+                    <div className="h-10 border-b border-border flex items-center px-3">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today's Tasks</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+                        <p className="text-xs text-muted-foreground/60">No tasks for today</p>
+                        <button
+                            onClick={e => setPopoverState({ type: 'task', x: e.clientX, y: e.clientY, date: new Date() })}
+                            className="mt-3 text-xs text-primary hover:underline"
+                        >+ Add Task</button>
                     </div>
                 </div>
-
-                {/* Drag Overlay */}
-                <DragOverlay>
-                    {activeEvent && (
-                        <div className="w-64 h-16 rounded-lg overflow-hidden shadow-xl opacity-90">
-                            <EventCard event={activeEvent} />
-                        </div>
-                    )}
-                </DragOverlay>
             </div>
+
+            <DragOverlay>
+                {activeEvent && (
+                    <div className="w-56 h-14 rounded-lg overflow-hidden shadow-xl opacity-90">
+                        <EventCard event={activeEvent} />
+                    </div>
+                )}
+            </DragOverlay>
         </DndContext>
     );
 };
+
+// ── Journal panel (matching the live app) ─────────────────────────────
+interface JournalViewProps {
+    currentDate: Date;
+    timedEvents: Event[];
+    journalTitle: string; setJournalTitle: (v: string) => void;
+    monthGoal: string; setMonthGoal: (v: string) => void;
+    todayGoal: string; setTodayGoal: (v: string) => void;
+    result: string; setResult: (v: string) => void;
+    actualResults: Record<string, string>; setActualResults: (v: Record<string, string>) => void;
+    hours: { label: string; hour: number }[];
+    setPopoverState: any;
+}
+
+function JournalView({
+    currentDate, timedEvents,
+    journalTitle, setJournalTitle,
+    monthGoal, setMonthGoal,
+    todayGoal, setTodayGoal,
+    result, setResult,
+    actualResults, setActualResults,
+    hours, setPopoverState
+}: JournalViewProps) {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const updateActual = (time: string, val: string) =>
+        setActualResults({ ...actualResults, [time]: val });
+
+    return (
+        <div className="flex-1 overflow-y-auto bg-background">
+            {/* Top bar */}
+            <div className="sticky top-0 z-20 bg-background border-b border-border px-4 py-2 flex items-center justify-between gap-3">
+                <div>
+                    <div className="text-base font-bold text-foreground">
+                        {format(currentDate, 'EEEE, MMMM d, yyyy')}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                        {timeStr} · Daily Journal
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-1.5 text-xs border border-border rounded-md px-2.5 py-1.5 hover:bg-muted transition-colors">
+                        <ChevronDown className="w-3 h-3" />
+                        Today Events ({timedEvents.length})
+                    </button>
+                    <button className="flex items-center gap-1.5 text-xs border border-border rounded-md px-2.5 py-1.5 hover:bg-muted transition-colors">
+                        <Copy className="w-3 h-3" />
+                        Copy yesterday's task
+                    </button>
+                    <button className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground rounded-md px-2.5 py-1.5 hover:bg-primary/90 transition-colors">
+                        <Save className="w-3 h-3" />
+                        Save
+                    </button>
+                </div>
+            </div>
+
+            <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+                {/* Journal title */}
+                <input
+                    value={journalTitle}
+                    onChange={e => setJournalTitle(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+                    placeholder="Dreams and Hopes for This Year"
+                />
+
+                {/* Goals row */}
+                <div className="grid grid-cols-3 gap-3">
+                    {[
+                        { icon: '🟡', label: 'Month', value: monthGoal, onChange: setMonthGoal, placeholder: "Month's goal..." },
+                        { icon: '🟢', label: 'Today', value: todayGoal, onChange: setTodayGoal, placeholder: "Today's goal..." },
+                        { icon: '🔵', label: 'Result', value: result, onChange: setResult, placeholder: 'Result...' },
+                    ].map(({ icon, label, value, onChange, placeholder }) => (
+                        <div key={label} className="border border-border rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border bg-muted/30">
+                                <span className="text-xs">{icon}</span>
+                                <span className="text-xs font-semibold text-foreground">{label}</span>
+                            </div>
+                            <input
+                                value={value}
+                                onChange={e => onChange(e.target.value)}
+                                placeholder={placeholder}
+                                className="w-full px-3 py-2 text-xs bg-background focus:outline-none placeholder:text-muted-foreground"
+                            />
+                        </div>
+                    ))}
+                </div>
+
+                {/* Hourly schedule table */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border">
+                        <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-foreground">Hourly Schedule</span>
+                    </div>
+
+                    {/* Table header */}
+                    <div className="grid grid-cols-[80px_1fr_180px] border-b border-border bg-muted/20">
+                        <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Time</div>
+                        <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-l border-border">Today's Task/Event</div>
+                        <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-l border-border">Actual Result</div>
+                    </div>
+
+                    {/* Rows */}
+                    {hours.map(({ label, hour }) => {
+                        // Find events at this hour
+                        const rowEvents = timedEvents.filter(ev => new Date(ev.startTime).getHours() === hour);
+                        return (
+                            <div key={label} className="grid grid-cols-[80px_1fr_180px] border-b border-border last:border-b-0 min-h-[56px]">
+                                {/* Time */}
+                                <div className="px-3 pt-2 border-r border-border">
+                                    <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                                </div>
+
+                                {/* Task/Event cell */}
+                                <div className="px-3 py-2 border-r border-border space-y-1">
+                                    {rowEvents.map(ev => (
+                                        <div
+                                            key={ev.id}
+                                            className="flex items-center gap-1.5 text-xs rounded px-1.5 py-0.5"
+                                            style={{ backgroundColor: ev.color ? ev.color + '30' : '#6366f130' }}
+                                        >
+                                            {ev.emoji && <span className="text-xs">{ev.emoji}</span>}
+                                            <span className="font-medium text-foreground truncate">{ev.title}</span>
+                                            <span className="text-muted-foreground ml-auto shrink-0">
+                                                {format(new Date(ev.startTime), 'HH:mm')}–{format(new Date(ev.endTime), 'HH:mm')}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <button
+                                            onClick={e => {
+                                                const d = new Date(currentDate);
+                                                d.setHours(hour, 0, 0, 0);
+                                                setPopoverState({ type: 'event', x: e.clientX, y: e.clientY, date: d });
+                                            }}
+                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            <Plus className="w-2.5 h-2.5" /> Add event
+                                        </button>
+                                        <button
+                                            onClick={e => {
+                                                const d = new Date(currentDate);
+                                                d.setHours(hour, 0, 0, 0);
+                                                setPopoverState({ type: 'task', x: e.clientX, y: e.clientY, date: d });
+                                            }}
+                                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            <Plus className="w-2.5 h-2.5" /> Add Task
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Actual result */}
+                                <div className="flex items-start gap-1.5 px-2 py-2">
+                                    {/* Result action icons */}
+                                    <div className="flex items-center gap-1 mt-0.5 shrink-0">
+                                        <button className="p-0.5 rounded text-green-500 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
+                                            <Check className="w-3 h-3" strokeWidth={2.5} />
+                                        </button>
+                                        <button className="p-0.5 rounded text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">
+                                            <Circle className="w-3 h-3" />
+                                        </button>
+                                        <button className="p-0.5 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                    <input
+                                        value={actualResults[label] ?? ''}
+                                        onChange={e => updateActual(label, e.target.value)}
+                                        placeholder="Actual..."
+                                        className="flex-1 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground/50 pt-0.5"
+                                    />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}

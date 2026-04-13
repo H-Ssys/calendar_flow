@@ -11,7 +11,7 @@ interface TaskBoardProps {
 }
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ onTaskClick }) => {
-    const { tasks, tasksByStatus, moveTask, reorderTasks, addTask } = useTaskContext();
+    const { tasks, tasksByStatus, moveTask, reorderTasks } = useTaskContext();
     const [activeTask, setActiveTask] = React.useState<Task | null>(null);
 
     const columns = useMemo(() => {
@@ -70,19 +70,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ onTaskClick }) => {
         }
     };
 
-    const handleAddTask = (status: TaskStatus, title: string) => {
-        addTask({
-            title,
-            description: '',
-            status,
-            priority: 'medium',
-            linkedEventIds: [],
-            tags: [],
-            category: '',
-            color: '#D3D3FF',
-            subtasks: [],
-        });
-    };
 
     return (
         <DndContext
@@ -97,7 +84,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ onTaskClick }) => {
                         status={col.id}
                         tasks={col.tasks}
                         onTaskClick={onTaskClick}
-                        onAddTask={handleAddTask}
                     />
                 ))}
             </div>

@@ -35,6 +35,8 @@ const RouteFallback = () => (
 );
 
 // ── Auth guard layout ───────────────────────────────────────────────
+import { Bot } from 'lucide-react';
+
 function ProtectedLayout() {
   const { isAuthenticated, loading } = useAuthContext();
 
@@ -47,6 +49,16 @@ function ProtectedLayout() {
         <NoteProvider>
           <MigrationBanner />
           <Outlet />
+          
+          {/* Global AI Assistant FAB */}
+          <button 
+            className="fixed bottom-6 right-6 z-[60] group flex items-center justify-center w-14 h-14 rounded-full shadow-lg border border-border/50 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 hover:shadow-xl hover:shadow-purple-500/20 hover:-translate-y-1 transition-all duration-300"
+            aria-label="AI Assistant"
+          >
+            <Bot className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" />
+            <span className="absolute inset-0 rounded-full animate-ping bg-purple-400/20 pointer-events-none"></span>
+            <span className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-violet-400/20 to-indigo-400/20 blur-sm pointer-events-none"></span>
+          </button>
         </NoteProvider>
       </TaskProvider>
     </CalendarProvider>

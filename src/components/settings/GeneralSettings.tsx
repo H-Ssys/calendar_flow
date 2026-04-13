@@ -163,17 +163,15 @@ export const GeneralSettings: React.FC = () => {
                     </div>
                     <Select
                         value={i18n.language}
-                        onValueChange={(lang) => {
-                            i18n.changeLanguage(lang);
-                            // Persisted via profileConfig.language → profiles.language
-                        }}
+                        onValueChange={(lang) => i18n.changeLanguage(lang)}
                     >
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Language" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="en">English</SelectItem>
-                            <SelectItem value="vi">Tiếng Việt</SelectItem>
+                            <SelectItem value="en">🇺🇸 English</SelectItem>
+                            <SelectItem value="vi">🇻🇳 Tiếng Việt</SelectItem>
+                            <SelectItem value="ko">🇰🇷 한국어</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>

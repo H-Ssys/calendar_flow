@@ -7,12 +7,13 @@ import { TaskDetail } from '@/components/tasks/TaskDetail';
 import { useTaskContext } from '@/context/TaskContext';
 import { Task } from '@/types/task';
 import { ActivityDashboard } from '@/components/tasks/ActivityDashboard';
+import { AddTaskPopover } from '@/components/tasks/AddTaskPopover';
 
 const Tasks = () => {
-    const { viewMode, addTask, tasks } = useTaskContext();
+    const { viewMode, tasks } = useTaskContext();
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [addTaskAnchor, setAddTaskAnchor] = useState<{ x: number; y: number } | null>(null);
 
-    // Derive live task from context — always fresh
     const selectedTask = selectedTaskId
         ? tasks.find(t => t.id === selectedTaskId) ?? null
         : null;
@@ -25,19 +26,9 @@ const Tasks = () => {
         setSelectedTaskId(null);
     };
 
-    const handleAddTask = () => {
-        const newTask = addTask({
-            title: 'New Task',
-            description: '',
-            status: 'todo',
-            priority: 'medium',
-            linkedEventIds: [],
-            tags: [],
-            category: '',
-            color: '#D3D3FF',
-            subtasks: [],
-        });
-        setSelectedTaskId(newTask.id);
+    const handleAddTask = (e: React.MouseEvent) => {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setAddTaskAnchor({ x: rect.left, y: rect.bottom + 8 });
     };
 
     return (
@@ -73,6 +64,14 @@ const Tasks = () => {
                     )}
                 </div>
             </main>
+
+            {addTaskAnchor && (
+                <AddTaskPopover
+                    x={addTaskAnchor.x}
+                    y={addTaskAnchor.y}
+                    onClose={() => setAddTaskAnchor(null)}
+                />
+            )}
         </div>
     );
 };

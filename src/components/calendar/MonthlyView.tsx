@@ -26,6 +26,7 @@ import {
     useSensor, useSensors, PointerSensor
 } from '@dnd-kit/core';
 import { toast } from 'sonner';
+import { CalendarPlus, Calendar, CalendarDays, BarChart2, X } from 'lucide-react';
 
 interface MonthlyViewProps {
     onEventClick?: (event: Event) => void;
@@ -36,7 +37,7 @@ const DroppableDayCell: React.FC<{
     date: Date;
     children: React.ReactNode;
     className?: string;
-    onClick?: () => void;
+    onClick?: (e: React.MouseEvent) => void;
 }> = ({ date, children, className, onClick }) => {
     const { isOver, setNodeRef } = useDroppable({
         id: `month-day-${date.toISOString()}`,
@@ -126,7 +127,7 @@ const DraggableMonthlyEventBar: React.FC<{
 };
 
 export const MonthlyView: React.FC<MonthlyViewProps> = ({ onEventClick }) => {
-    const { currentDate, setDate, setView, setDailyViewVariant, updateEvent, monthlyViewConfig } = useCalendar();
+    const { currentDate, setDate, setView, setDailyViewVariant, updateEvent, monthlyViewConfig, popoverState, setPopoverState } = useCalendar();
     const expandedEvents = useExpandedEvents();
     const { tasks } = useTaskContext();
     const [draggedEvent, setDraggedEvent] = useState<Event | null>(null);
@@ -184,7 +185,12 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ onEventClick }) => {
         });
     };
 
-    const handleDayClick = (date: Date) => {
+    const handleDayClick = (date: Date, e: React.MouseEvent) => {
+        setPopoverState({ type: 'menu', x: e.clientX, y: e.clientY, date });
+    };
+
+    const handleDayNumberClick = (date: Date, e: React.MouseEvent) => {
+        e.stopPropagation();
         setDate(date);
         setDailyViewVariant('timeline');
         setView('daily');
@@ -288,7 +294,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ onEventClick }) => {
                                             <DroppableDayCell
                                                 key={dayIndex}
                                                 date={d}
-                                                onClick={() => handleDayClick(d)}
+                                                onClick={(e) => handleDayClick(d, e)}
                                                 className={`
                                                     relative border-r border-border last:border-r-0
                                                     cursor-pointer transition-colors hover:bg-muted/50
@@ -296,9 +302,10 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ onEventClick }) => {
                                                     ${isDayToday ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}
                                                 `}
                                             >
-                                                {/* Day Number — kept compact at the very top */}
+                                                {/* Day Number — click goes to daily view */}
                                                 <div className="flex items-center justify-between px-1.5 pt-1 pb-0.5 relative z-20">
                                                     <span
+                                                        onClick={(e) => handleDayNumberClick(d, e)}
                                                         className={`
                                                             text-xs font-semibold leading-none
                                                             ${!isCurrentMonth ? 'text-muted-foreground' : 'text-foreground'}
@@ -353,6 +360,8 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ onEventClick }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Popovers are now handled globally in Index.tsx */}
 
             {/* Drag Overlay */}
             <DragOverlay>

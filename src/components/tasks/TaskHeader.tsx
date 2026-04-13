@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, LayoutGrid, List, Plus, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 
 interface TaskHeaderProps {
-    onAddTask: () => void;
+    onAddTask: (e: React.MouseEvent) => void;
 }
 
 export const TaskHeader: React.FC<TaskHeaderProps> = ({ onAddTask }) => {
@@ -67,7 +67,7 @@ export const TaskHeader: React.FC<TaskHeaderProps> = ({ onAddTask }) => {
                         </button>
                     </div>
 
-                    <Button onClick={onAddTask} size="sm" className="gap-1">
+                    <Button onClick={(e) => onAddTask(e)} size="sm" className="gap-1">
                         <Plus className="w-4 h-4" />
                         Add Task
                     </Button>

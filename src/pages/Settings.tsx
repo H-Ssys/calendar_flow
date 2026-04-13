@@ -13,6 +13,11 @@ import { YearlySettings } from '@/components/settings/YearlySettings';
 import { ProfileSettings } from '@/components/settings/ProfileSettings';
 import { EmailSettings } from '@/components/settings/EmailSettings';
 import { BillingSettings } from '@/components/settings/BillingSettings';
+import { FlexibleEventsSettings } from '@/components/settings/FlexibleEventsSettings';
+import { FocusGuardSettings } from '@/components/settings/FocusGuardSettings';
+import { EventTaskModuleSettings } from '@/components/settings/EventTaskModuleSettings';
+import { NotesModuleSettings } from '@/components/settings/NotesModuleSettings';
+import { SmartContactsModuleSettings } from '@/components/settings/SmartContactsModuleSettings';
 
 const Settings = () => {
     const [activeTab, setActiveTab] = useState('general');
@@ -45,6 +50,12 @@ const Settings = () => {
                 return <EmailSettings />;
             case 'billing':
                 return <BillingSettings />;
+            case 'event-task':
+                return <EventTaskModuleSettings />;
+            case 'notes':
+                return <NotesModuleSettings />;
+            case 'smart-contacts':
+                return <SmartContactsModuleSettings />;
             default:
                 return (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">

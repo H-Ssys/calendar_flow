@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, User, Layout, Palette, Calendar, Users, Video, Clock, CreditCard, Mail, Menu, Columns2 } from 'lucide-react';
+import { ArrowLeft, User, Palette, Calendar, Users, Video, Clock, CreditCard, Mail, Menu, Columns2, CheckSquare, FileText, Rocket, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
@@ -29,12 +29,20 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeTab = 'g
             ]
         },
         {
+            category: 'Modules',
+            items: [
+                { id: 'event-task', label: 'Event & Task', icon: CheckSquare },
+                { id: 'notes', label: 'Notes', icon: FileText },
+                { id: 'smart-contacts', label: 'Smart Contacts', icon: Users },
+            ]
+        },
+        {
             category: 'Scheduling',
             items: [
                 { id: 'daily-settings', label: 'Daily', icon: Clock },
                 { id: 'weekly-settings', label: 'Weekly', icon: Calendar },
-                { id: 'monthly-settings', label: 'Monthly', icon: Layout },
-                { id: 'yearly-settings', label: 'Yearly', icon: Columns2 },
+                { id: 'monthly-settings', label: 'Monthly', icon: Columns2 },
+                { id: 'yearly-settings', label: 'Yearly', icon: Rocket },
             ]
         },
         {

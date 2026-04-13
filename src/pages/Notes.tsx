@@ -6,6 +6,7 @@ import { useNoteContext } from '@/context/NoteContext';
 import { FileText, Plus, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/useMediaQuery';
+import { PageHeaderRight } from '@/components/PageHeaderRight';
 
 const Notes = () => {
     const { activeNote, addNote, setActiveNote } = useNoteContext();
@@ -15,34 +16,38 @@ const Notes = () => {
     const showEditor = activeNote !== null;
 
     return (
-        <div className="flex w-full h-screen bg-background overflow-hidden">
+        <div className="flex w-full h-screen bg-background overflow-hidden relative">
             {/* Left Sidebar */}
             <CalendarSidebar />
 
-            {/* Mobile: show either list or editor, not both */}
-            {isMobile ? (
-                showEditor && activeNote ? (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Back button */}
-                        <div className="flex items-center gap-2 p-2 border-b border-border">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setActiveNote(null)}
-                                className="gap-1"
-                            >
-                                <ArrowLeft className="w-4 h-4" />
-                                Back
-                            </Button>
-                        </div>
-                        <NoteEditor note={activeNote} />
-                    </div>
-                ) : (
-                    <NoteList />
-                )
-            ) : (
-                /* Desktop: side-by-side layout */
-                <>
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <PageHeaderRight />
+                
+                <div className="flex flex-1 overflow-hidden">
+                    {/* Mobile: show either list or editor, not both */}
+                    {isMobile ? (
+                        showEditor && activeNote ? (
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                {/* Back button */}
+                                <div className="flex items-center gap-2 p-2 border-b border-border">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setActiveNote(null)}
+                                        className="gap-1"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        Back
+                                    </Button>
+                                </div>
+                                <NoteEditor note={activeNote} />
+                            </div>
+                        ) : (
+                            <NoteList />
+                        )
+                    ) : (
+                        /* Desktop: side-by-side layout */
+                        <>
                     {/* Note List */}
                     <NoteList />
 
@@ -68,6 +73,8 @@ const Notes = () => {
                     </div>
                 </>
             )}
+                </div>
+            </div>
         </div>
     );
 };

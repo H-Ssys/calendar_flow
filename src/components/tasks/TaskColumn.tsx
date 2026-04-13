@@ -5,19 +5,17 @@ import { TaskStatus, TASK_COLUMNS } from '@/types/task';
 import { Task } from '@/types/task';
 import { TaskCard } from './TaskCard';
 import { Plus } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { AddTaskPopover } from './AddTaskPopover';
 
 interface TaskColumnProps {
     status: TaskStatus;
     tasks: Task[];
     onTaskClick: (task: Task) => void;
-    onAddTask: (status: TaskStatus, title: string) => void;
 }
 
-export const TaskColumnComponent: React.FC<TaskColumnProps> = ({ status, tasks, onTaskClick, onAddTask }) => {
-    const [isAdding, setIsAdding] = useState(false);
-    const [newTitle, setNewTitle] = useState('');
+export const TaskColumnComponent: React.FC<TaskColumnProps> = ({ status, tasks, onTaskClick }) => {
+    const [addAnchor, setAddAnchor] = useState<{ x: number; y: number } | null>(null);
 
     const { isOver, setNodeRef } = useDroppable({
         id: `column-${status}`,
@@ -25,22 +23,7 @@ export const TaskColumnComponent: React.FC<TaskColumnProps> = ({ status, tasks, 
     });
 
     const column = TASK_COLUMNS.find(c => c.id === status)!;
-
-    // Sortable IDs must match the IDs used in useSortable
     const sortableIds = tasks.map(t => `task-drag-${t.id}`);
-
-    const handleAdd = () => {
-        if (newTitle.trim()) {
-            onAddTask(status, newTitle.trim());
-            setNewTitle('');
-            setIsAdding(false);
-        }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') handleAdd();
-        if (e.key === 'Escape') { setIsAdding(false); setNewTitle(''); }
-    };
 
     return (
         <div className="flex flex-col min-w-[280px] max-w-[320px] flex-1">
@@ -71,32 +54,26 @@ export const TaskColumnComponent: React.FC<TaskColumnProps> = ({ status, tasks, 
                     ))}
                 </SortableContext>
 
-                {/* Add Task */}
-                {isAdding ? (
-                    <div className="p-2">
-                        <Input
-                            autoFocus
-                            value={newTitle}
-                            onChange={(e) => setNewTitle(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onBlur={() => { if (!newTitle.trim()) setIsAdding(false); }}
-                            placeholder="Task title..."
-                            className="text-sm h-8"
-                        />
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                            Enter to add · Esc to cancel
-                        </p>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => setIsAdding(true)}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-colors"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add task
-                    </button>
-                )}
+                {/* Add Task — opens global popover */}
+                <button
+                    onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setAddAnchor({ x: rect.left, y: rect.bottom + 8 });
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-colors"
+                >
+                    <Plus className="w-4 h-4" />
+                    Add task
+                </button>
             </div>
+
+            {addAnchor && (
+                <AddTaskPopover
+                    x={addAnchor.x}
+                    y={addAnchor.y}
+                    onClose={() => setAddAnchor(null)}
+                />
+            )}
         </div>
     );
 };

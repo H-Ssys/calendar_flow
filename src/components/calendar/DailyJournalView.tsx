@@ -107,85 +107,8 @@ const parseEventTime = (timeStr: string): string | null => {
 };
 
 export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick }) => {
-  const { currentDate, events, timeConfig, addEvent } = useCalendar();
+  const { currentDate, events, timeConfig, addEvent, setPopoverState, setSelectedTaskForDetail } = useCalendar();
   const { addTask, tasks, updateTask, deleteTask, addSubtask, toggleSubtask, deleteSubtask } = useTaskContext();
-  const [isAddEventOpen, setIsAddEventOpen] = useState(false);
-
-  // Add Task dialog state
-  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
-  const [addTaskSlotId, setAddTaskSlotId] = useState<string | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = useState('New Task');
-  const [newTaskDescription, setNewTaskDescription] = useState('');
-  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo');
-  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium');
-  const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [newTaskTags, setNewTaskTags] = useState<string[]>([]);
-  const [newTaskTagInput, setNewTaskTagInput] = useState('');
-  const [newTaskSubtasks, setNewTaskSubtasks] = useState<{ id: string; title: string; done: boolean }[]>([]);
-  const [newTaskSubtaskInput, setNewTaskSubtaskInput] = useState('');
-
-  const openAddTaskDialog = (slotId: string, slotStartTime: string) => {
-    setAddTaskSlotId(slotId);
-    setNewTaskTitle('New Task');
-    setNewTaskDescription('');
-    setNewTaskStatus('todo');
-    setNewTaskPriority('medium');
-    setNewTaskDueDate(format(currentDate, 'yyyy-MM-dd'));
-    setNewTaskTags([]);
-    setNewTaskTagInput('');
-    setNewTaskSubtasks([]);
-    setNewTaskSubtaskInput('');
-    setIsAddTaskOpen(true);
-  };
-
-  const handleCreateTask = () => {
-    if (!newTaskTitle.trim()) return;
-    const task = addTask({
-      title: newTaskTitle.trim(),
-      description: newTaskDescription,
-      status: newTaskStatus,
-      priority: newTaskPriority,
-      dueDate: newTaskDueDate ? new Date(newTaskDueDate + 'T23:59:59') : undefined,
-      tags: newTaskTags,
-      category: '',
-      color: PRIORITY_CONFIG[newTaskPriority].color,
-      subtasks: newTaskSubtasks,
-      linkedEventIds: [],
-      linkedTaskIds: [],
-      actualResult: '',
-      scheduledDate: format(currentDate, 'yyyy-MM-dd'),
-      scheduledSlotId: addTaskSlotId || undefined,
-    } as any);
-    // Link task to the journal time slot
-    if (addTaskSlotId) {
-      updateTimeSlot(addTaskSlotId, {
-        linkedTaskIds: [...(entry?.timeSlots.find(s => s.id === addTaskSlotId)?.linkedTaskIds || []), task.id],
-      });
-    }
-    setIsAddTaskOpen(false);
-  };
-
-  const handleAddNewTag = () => {
-    const t = newTaskTagInput.trim().toLowerCase();
-    if (t && !newTaskTags.includes(t)) {
-      setNewTaskTags(prev => [...prev, t]);
-      setNewTaskTagInput('');
-    }
-  };
-
-  const handleAddNewSubtask = () => {
-    const t = newTaskSubtaskInput.trim();
-    if (t) {
-      setNewTaskSubtasks(prev => [...prev, { id: `st-${Date.now()}`, title: t, done: false }]);
-      setNewTaskSubtaskInput('');
-    }
-  };
-
-  // Custom event form state
-  const [customEventTitle, setCustomEventTitle] = useState('');
-  const [customEventTime, setCustomEventTime] = useState('09:00');
-  const [customEventDuration, setCustomEventDuration] = useState('1');
-  const [customEventEmoji, setCustomEventEmoji] = useState('📅');
 
   // Quick event template states
   const [isQuickEventDialogOpen, setIsQuickEventDialogOpen] = useState(false);
@@ -228,9 +151,6 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
   // Link existing event state
   const [linkEventSlotId, setLinkEventSlotId] = useState<string | null>(null);
   const [linkEventSearch, setLinkEventSearch] = useState('');
-
-  // Selected task for detail modal
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Sync actualText → linked tasks' actualResult
   const syncActualResultToTasks = useCallback((slotId: string, text: string) => {
@@ -306,39 +226,6 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
     setSelectedTemplate(null);
   };
 
-  const handleAddCustomEvent = () => {
-    if (!customEventTitle.trim()) {
-      alert('Please enter an event title');
-      return;
-    }
-
-    const endHour = parseInt(customEventTime.split(':')[0]) + parseInt(customEventDuration);
-    const endTime = `${endHour.toString().padStart(2, '0')}:${customEventTime.split(':')[1]}`;
-
-    // Build proper startTime/endTime
-    const customStartDate = new Date(currentDate);
-    const customStartH = parseInt(customEventTime.split(':')[0]);
-    const customStartM = parseInt(customEventTime.split(':')[1]);
-    customStartDate.setHours(customStartH, customStartM, 0, 0);
-    const customEndDate = new Date(customStartDate.getTime() + parseInt(customEventDuration) * 60 * 60 * 1000);
-
-    addEvent({
-      title: customEventTitle,
-      startTime: customStartDate,
-      endTime: customEndDate,
-      isAllDay: false,
-      emoji: customEventEmoji,
-      color: '#93C5FD',
-      description: 'Custom event created from Daily Journal',
-    });
-
-    // Reset form
-    setCustomEventTitle('');
-    setCustomEventTime('09:00');
-    setCustomEventDuration('1');
-    setCustomEventEmoji('📅');
-    setIsAddEventOpen(false);
-  };
 
   const handleEditTemplate = (index: number) => {
     const template = quickEventTemplates[index];
@@ -453,7 +340,9 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
                           </div>
                         ))}
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setIsAddEventOpen(true)}>
+                        <DropdownMenuItem onClick={(e) => {
+                            setPopoverState({ type: 'event', x: e.clientX, y: e.clientY, date: currentDate });
+                          }}>
                           <Plus className="w-4 h-4 mr-2" />
                           Custom Event
                         </DropdownMenuItem>
@@ -722,7 +611,7 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
                                             color: statusColors[t.status] || '#94a3b8',
                                             borderLeft: `2px solid ${statusColors[t.status] || '#94a3b8'}`,
                                           }}
-                                          onClick={() => setSelectedTask(t)}
+                                          onClick={() => setSelectedTaskForDetail(t)}
                                         >
                                           {PRIORITY_CONFIG[t.priority].emoji} {t.title}
                                           {totalCount > 0 && (
@@ -745,16 +634,36 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
                                   </div>
                                 ) : null;
                               })()}
-                              {/* Add Task + Link Existing */}
-                              <div className="flex gap-1">
+                              {/* Add Task + Event */}
+                              <div className="flex flex-col gap-1">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => openAddTaskDialog(slot.id, slot.startTime)}
-                                  className="h-7 text-xs text-muted-foreground hover:text-foreground flex-1 justify-start px-2 gap-1"
+                                  onClick={(e) => {
+                                      const slotDate = new Date(currentDate);
+                                      const [hour, min] = slot.startTime.split(':').map(Number);
+                                      slotDate.setHours(hour, min, 0, 0);
+                                      setPopoverState({ type: 'event', x: e.clientX, y: e.clientY, date: slotDate });
+                                  }}
+                                  className="h-6 text-[10px] text-muted-foreground hover:text-foreground flex-1 justify-start px-2 gap-1 w-fit mt-1"
                                 >
-                                  <Plus className="w-3 h-3" /> New
+                                  <Plus className="w-2.5 h-2.5" /> Add event
                                 </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                      const slotDate = new Date(currentDate);
+                                      const [hour, min] = slot.startTime.split(':').map(Number);
+                                      slotDate.setHours(hour, min, 0, 0);
+                                      setPopoverState({ type: 'task', x: e.clientX, y: e.clientY, date: slotDate });
+                                  }}
+                                  className="h-6 text-[10px] text-muted-foreground hover:text-foreground flex-1 justify-start px-2 gap-1 w-fit mb-1"
+                                >
+                                  <Plus className="w-2.5 h-2.5" /> Add Task
+                                </Button>
+                              </div>
+                              <div className="flex gap-1 mt-1">
                                 <div className="relative">
                                   <Button
                                     variant="ghost"
@@ -1040,265 +949,6 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Add Custom Event Dialog */}
-        <Dialog open={isAddEventOpen} onOpenChange={setIsAddEventOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Custom Event</DialogTitle>
-              <DialogDescription>
-                Create a custom event for {format(currentDate, 'MMMM d, yyyy')}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="emoji">Emoji</Label>
-                <Input
-                  id="emoji"
-                  value={customEventEmoji}
-                  onChange={(e) => setCustomEventEmoji(e.target.value)}
-                  placeholder="📅"
-                  maxLength={2}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="title">Event Title</Label>
-                <Input
-                  id="title"
-                  value={customEventTitle}
-                  onChange={(e) => setCustomEventTitle(e.target.value)}
-                  placeholder="Meeting, Task, etc."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="time">Start Time</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={customEventTime}
-                    onChange={(e) => setCustomEventTime(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duration (hours)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    min="0.5"
-                    max="8"
-                    step="0.5"
-                    value={customEventDuration}
-                    onChange={(e) => setCustomEventDuration(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddEventOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddCustomEvent}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Event
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Add Task Dialog ── */}
-        <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
-          <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto p-0">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: PRIORITY_CONFIG[newTaskPriority].color }}
-                />
-                <span className="text-sm font-medium text-muted-foreground">
-                  {TASK_COLUMNS.find(c => c.id === newTaskStatus)?.emoji}{' '}
-                  {TASK_COLUMNS.find(c => c.id === newTaskStatus)?.title}
-                </span>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setIsAddTaskOpen(false)} className="h-8 w-8 p-0">
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="p-5 space-y-5">
-              {/* Title */}
-              <Input
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                className="text-lg font-semibold border-none shadow-none px-0 focus-visible:ring-0 h-auto"
-                placeholder="Task title..."
-              />
-
-              {/* Description */}
-              <Textarea
-                value={newTaskDescription}
-                onChange={(e) => setNewTaskDescription(e.target.value)}
-                placeholder="Add a description..."
-                className="min-h-[80px] text-sm resize-none border-dashed"
-                rows={3}
-              />
-
-              {/* Status + Priority */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                    <Flag className="w-3 h-3" /> Status
-                  </label>
-                  <Select value={newTaskStatus} onValueChange={(val) => setNewTaskStatus(val as TaskStatus)}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TASK_COLUMNS.map(col => (
-                        <SelectItem key={col.id} value={col.id}>
-                          {col.emoji} {col.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Priority
-                  </label>
-                  <Select value={newTaskPriority} onValueChange={(val) => setNewTaskPriority(val as TaskPriority)}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => (
-                        <SelectItem key={key} value={key}>
-                          {cfg.emoji} {cfg.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Due Date */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <CalendarIcon className="w-3 h-3" /> Due Date
-                </label>
-                <Input
-                  type="date"
-                  value={newTaskDueDate}
-                  onChange={(e) => setNewTaskDueDate(e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              {/* Tags */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Tag className="w-3 h-3" /> Tags
-                </label>
-                {newTaskTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {newTaskTags.map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-xs px-2 py-0.5 gap-1">
-                        {tag}
-                        <button onClick={() => setNewTaskTags(prev => prev.filter(t => t !== tag))} className="hover:text-destructive">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    value={newTaskTagInput}
-                    onChange={(e) => setNewTaskTagInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddNewTag(); } }}
-                    placeholder="Add tag..."
-                    className="h-8 text-sm flex-1"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddNewTag} className="h-8">
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Subtasks */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Subtasks
-                  {newTaskSubtasks.length > 0 && (
-                    <span className="text-[10px]">({newTaskSubtasks.filter(s => s.done).length}/{newTaskSubtasks.length})</span>
-                  )}
-                </label>
-                {newTaskSubtasks.length > 0 && (
-                  <div className="space-y-1">
-                    {newTaskSubtasks.map(st => (
-                      <div key={st.id} className="flex items-center gap-2 group py-0.5">
-                        <Checkbox
-                          checked={st.done}
-                          onCheckedChange={() => setNewTaskSubtasks(prev => prev.map(s => s.id === st.id ? { ...s, done: !s.done } : s))}
-                          className="w-4 h-4"
-                        />
-                        <span className={cn("flex-1 text-sm", st.done && "line-through text-muted-foreground")}>
-                          {st.title}
-                        </span>
-                        <button
-                          onClick={() => setNewTaskSubtasks(prev => prev.filter(s => s.id !== st.id))}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    value={newTaskSubtaskInput}
-                    onChange={(e) => setNewTaskSubtaskInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddNewSubtask(); } }}
-                    placeholder="Add subtask..."
-                    className="h-8 text-sm flex-1"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddNewSubtask} className="h-8">
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="border-t border-border p-4 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setIsAddTaskOpen(false)}>
-                Close
-              </Button>
-              <Button size="sm" onClick={handleCreateTask}>
-                <Plus className="w-4 h-4 mr-1" /> Create Task
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Task Detail Modal (opens when clicking a linked task badge) */}
-        {selectedTask && (
-          <Dialog open={!!selectedTask} onOpenChange={(open) => { if (!open) setSelectedTask(null); }}>
-            <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto p-0">
-              <TaskDetail
-                task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
-                onClose={() => setSelectedTask(null)}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
 
       </div>
     );

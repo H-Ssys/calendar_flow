@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, LayoutPanelLeft, Calendar as CalendarIcon, CalendarCheck2, ListTodo, FileText, CheckCircle2, AlertCircle, Clock, Menu, Users, UserPlus } from 'lucide-react';
+import { Search, Plus, LayoutPanelLeft, Calendar as CalendarIcon, CalendarCheck2, ListTodo, FileText, CheckCircle2, AlertCircle, Clock, Menu, Users, UserPlus, ChevronDown, User, LogOut } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MiniCalendar } from './MiniCalendar';
 import { UserProfile } from './UserProfile';
@@ -20,11 +20,11 @@ export const CalendarSidebar: React.FC = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const navItems = [
-    { path: '/', label: 'Calendar', icon: CalendarIcon },
+    { path: '/', label: 'My Calendar', icon: CalendarIcon },
     { path: '/tasks', label: 'Event / Task', icon: CalendarCheck2 },
     { path: '/notes', label: 'Notes', icon: FileText },
     { path: '/contacts', label: 'Smart Contacts', icon: Users },
-    { path: '/teams', label: 'Teams', icon: UserPlus },
+    { path: '/teams', label: 'Team', icon: UserPlus },
   ];
 
   // Task stats
@@ -161,69 +161,65 @@ export const CalendarSidebar: React.FC = () => {
   );
 
   // ── Shared sidebar inner content ──
-  const SidebarInner = () => (
+  const SidebarInner = (
     <>
-      {/* Header */}
       <header className="flex h-20 justify-center items-center gap-4 self-stretch p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 flex-1 self-stretch">
-          <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-[hsl(var(--primary-blue))] to-[hsl(var(--primary-blue-dark))] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-[#4052FF] to-[#2532B0] flex items-center justify-center flex-shrink-0">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2" fill="none" />
-              <circle cx="12" cy="12" r="4" fill="white" />
+              <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2" fill="none"></circle>
+              <circle cx="12" cy="12" r="4" fill="white"></circle>
             </svg>
           </div>
           <h1 className="text-foreground text-xl font-bold flex-1 tracking-tight">Ofative</h1>
-          <button className="flex items-center gap-2.5 border p-1.5 rounded-lg border-sidebar-border hover:bg-muted transition-colors">
+          <button className="flex items-center gap-2.5 border p-1.5 rounded-lg border-sidebar-border hover:bg-muted transition-colors" title="Collapse sidebar">
             <LayoutPanelLeft className="w-4 h-4 text-foreground" />
           </button>
         </div>
       </header>
 
+      <div className="px-3 py-2 border-b border-sidebar-border w-full">
+        <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left" type="button">
+          <div className="w-5 h-5 rounded-full bg-muted-foreground/20 flex items-center justify-center shrink-0">
+            <User className="w-3 h-3 text-muted-foreground" />
+          </div>
+          <span className="text-sm font-medium text-foreground truncate flex-1">Personal</span>
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        </button>
+      </div>
+
       {/* Mini Calendar */}
-      <section className="flex flex-col justify-center items-center gap-3.5 self-stretch p-4 border-b border-sidebar-border">
-        <MiniCalendar />
+      <section className="flex flex-col justify-center items-center gap-3.5 self-stretch p-4 border-b border-sidebar-border w-full">
+        <div className="flex flex-col items-center justify-center w-full">
+          <MiniCalendar />
+        </div>
       </section>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-0.5 self-stretch px-3 pt-3 pb-1">
-        {navItems.map(({ path, label, icon: Icon }) => (
-          <button
-            key={path}
-            onClick={() => { navigate(path); setSheetOpen(false); }}
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              location.pathname === path
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
+      <nav className="flex flex-col gap-0.5 self-stretch px-3 pt-3 pb-1 w-full">
+        {navItems.map(({ path, label, icon: Icon }) => {
+          const isActive = location.pathname === path;
+          return (
+            <button
+              key={path}
+              onClick={() => { navigate(path); setSheetOpen(false); }}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors w-full text-left",
+                isActive
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+              )}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
-      {/* Main Content — Page-specific */}
-      <main className="flex flex-col items-center gap-4 flex-1 self-stretch p-4 overflow-hidden">
+      {/* Main Content — Empty to match design */}
+      <main className="flex flex-col items-center gap-4 flex-1 self-stretch p-4 overflow-hidden w-full">
         <div className="flex flex-col items-center gap-3 flex-1 self-stretch overflow-auto">
-          {/* Search Input */}
-          <div className="flex items-center gap-3 w-full h-10 border border-input rounded-lg px-3 bg-background focus-within:ring-2 focus-within:ring-ring transition-all">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder={getSearchPlaceholder()}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium"
-            />
-          </div>
-
-          {/* Context-aware content */}
-          <div className="flex flex-col items-center gap-3 self-stretch">
-            {location.pathname === '/' && <CalendarSidebarContent />}
-            {location.pathname === '/tasks' && <TaskSidebarContent />}
-            {location.pathname === '/notes' && <NoteSidebarContent />}
-          </div>
         </div>
 
         {/* User Profile */}
@@ -246,8 +242,8 @@ export const CalendarSidebar: React.FC = () => {
         </button>
 
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-sidebar-background">
-            <SidebarInner />
+          <SheetContent side="left" className="w-[238px] p-0 flex flex-col bg-sidebar-background">
+            {SidebarInner}
           </SheetContent>
         </Sheet>
       </>
@@ -256,8 +252,8 @@ export const CalendarSidebar: React.FC = () => {
 
   // ── Desktop: Fixed sidebar ──
   return (
-    <aside className="flex w-[238px] h-screen flex-col items-center bg-sidebar-background border-r border-sidebar-border flex-shrink-0">
-      <SidebarInner />
+    <aside className="flex h-screen flex-col items-center bg-sidebar-background border-r border-sidebar-border flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden w-[238px]">
+      {SidebarInner}
     </aside>
   );
 };

@@ -4,6 +4,7 @@ import * as eventSupabaseService from '@/services/supabase/eventSupabaseService'
 import * as settingsService from '@/services/supabase/settingsSupabaseService';
 import type { SettingsBlob } from '@/services/supabase/settingsSupabaseService';
 import { mapV1ToV2, mapV2ToV1, mapV1UpdateToV2 } from '@/utils/eventTypeMapper';
+import type { Task } from '@/types/task';
 
 // ── Debounce helper for settings saves ─────────────────────────────
 function useDebouncedCallback<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
@@ -141,6 +142,13 @@ export interface EmailNotificationConfig {
     securityAlerts: boolean;
 }
 
+export type GlobalPopoverState = null | {
+    type: 'menu' | 'event' | 'task';
+    x: number;
+    y: number;
+    date?: Date;
+};
+
 interface CalendarContextType {
     events: Event[];
     currentView: ViewType;
@@ -203,6 +211,16 @@ interface CalendarContextType {
     eventLogs: EventLog[];
     getEventLogs: (eventId: string) => EventLog[];
     clearEventLogs: () => void;
+
+    // Global Popovers
+    popoverState: GlobalPopoverState;
+    setPopoverState: (state: GlobalPopoverState) => void;
+
+    // Detail Sheets
+    selectedEventForDetail: Event | null;
+    setSelectedEventForDetail: (event: Event | null) => void;
+    selectedTaskForDetail: Task | null;
+    setSelectedTaskForDetail: (task: Task | null) => void;
 }
 
 export const DEFAULT_CATEGORY_COLOR = '#96AAFF'; // Periwinkle - first palette color
@@ -263,6 +281,9 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [currentDate, setCurrentDate] = useState(new Date());
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategories, setActiveCategories] = useState<string[]>(['Work Plan']);
+    const [popoverState, setPopoverState] = useState<GlobalPopoverState>(null);
+    const [selectedEventForDetail, setSelectedEventForDetail] = useState<Event | null>(null);
+    const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
 
     // Settings State (declared early so Supabase settings load effect can reference setTheme)
     const [theme, setTheme] = useState<Theme>('light');
@@ -533,6 +554,14 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
         eventLogs,
         getEventLogs,
         clearEventLogs,
+        // Global Popovers
+        popoverState,
+        setPopoverState,
+        // Detail Sheets
+        selectedEventForDetail,
+        setSelectedEventForDetail,
+        selectedTaskForDetail,
+        setSelectedTaskForDetail,
     };
 
     return (

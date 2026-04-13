@@ -16,7 +16,7 @@ interface WeeklyViewProps {
 }
 
 export const WeeklyView: React.FC<WeeklyViewProps> = ({ onEventClick, onCellClick }) => {
-  const { events, currentDate, searchQuery, timeConfig, updateEvent } = useCalendar();
+  const { events, currentDate, searchQuery, timeConfig, updateEvent, setPopoverState } = useCalendar();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -221,11 +221,21 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({ onEventClick, onCellClic
                       key={`${dayIndex}-${rowIndex}`}
                       id={`drop-day-${dayIndex}-hour-${rowIndex}`}
                       className="border-b border-border pointer-events-auto cursor-pointer hover:bg-primary/5 transition-colors flex-1"
-                      onClick={() => {
+                      onClick={(e) => {
+                        const cellDate = new Date(dayObj.date);
+                        // Make date object precise to the cell time
+                        const start = new Date(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+                        start.setHours(START_HOUR + rowIndex, 0, 0, 0);
+
+                        setPopoverState({
+                          type: 'menu',
+                          x: e.clientX,
+                          y: e.clientY,
+                          date: start
+                        });
+
                         if (onCellClick) {
-                          const cellDate = new Date(dayObj.date);
-                          cellDate.setHours(rowIndex, 0, 0, 0);
-                          onCellClick(cellDate);
+                          onCellClick(start);
                         }
                       }}
                     />

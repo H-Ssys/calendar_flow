@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useCalendar, Event, EventLog } from '@/context/CalendarContext';
 import { EventCard } from './EventCard';
 import { EventDetail } from './EventDetail';
-import { EventCreateDialog } from './EventCreateDialog';
+import { AddEventPopover } from './AddEventPopover';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,7 +74,7 @@ export const EventPage: React.FC = () => {
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDir, setSortDir] = useState<SortDir>('asc');
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-    const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [addEventAnchor, setAddEventAnchor] = useState<{ x: number; y: number } | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showStats, setShowStats] = useState(false);
     const [showConflicts, setShowConflicts] = useState(false);
@@ -239,7 +239,13 @@ export const EventPage: React.FC = () => {
                             >
                                 <History className="w-3.5 h-3.5" /> Logs
                             </Button>
-                            <Button onClick={() => setShowCreateDialog(true)} size="sm" className="gap-1">
+                            <Button
+                                onClick={(e) => {
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setAddEventAnchor({ x: rect.left - 360, y: rect.bottom + 8 });
+                                }}
+                                size="sm" className="gap-1"
+                            >
                                 <Plus className="w-4 h-4" />
                                 Add Event
                             </Button>
@@ -474,7 +480,13 @@ export const EventPage: React.FC = () => {
                                 </p>
                             </div>
                             {!search && categoryFilter === 'all' && dateRange === 'all' && (
-                                <Button onClick={() => setShowCreateDialog(true)} className="gap-1">
+                                <Button
+                                    onClick={(e) => {
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        setAddEventAnchor({ x: rect.left - 180, y: rect.bottom + 8 });
+                                    }}
+                                    className="gap-1"
+                                >
                                     <Plus className="w-4 h-4" /> Create your first event
                                 </Button>
                             )}
@@ -548,11 +560,14 @@ export const EventPage: React.FC = () => {
                 />
             )}
 
-            {/* Create dialog */}
-            <EventCreateDialog
-                open={showCreateDialog}
-                onClose={() => setShowCreateDialog(false)}
-            />
+            {/* Add Event Popover */}
+            {addEventAnchor && (
+                <AddEventPopover
+                    x={addEventAnchor.x}
+                    y={addEventAnchor.y}
+                    onClose={() => setAddEventAnchor(null)}
+                />
+            )}
         </div>
     );
 };

@@ -10,6 +10,8 @@ import { ActivityDashboard } from '@/components/tasks/ActivityDashboard';
 import { EventPage } from '@/components/events/EventPage';
 import { CalendarCheck2, ListTodo } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PageHeaderRight } from '@/components/PageHeaderRight';
+import { AddTaskPopover } from '@/components/tasks/AddTaskPopover';
 
 type ActiveTab = 'events' | 'tasks';
 
@@ -30,22 +32,11 @@ const EventTask = () => {
         setSelectedTaskId(null);
     };
 
-    const handleAddTask = () => {
-        const newTask = addTask({
-            title: 'New Task',
-            description: '',
-            status: 'todo',
-            priority: 'medium',
-            linkedEventIds: [],
-            linkedTaskIds: [],
-            tags: [],
-            category: '',
-            color: '#D3D3FF',
-            subtasks: [],
-            actualResult: '',
-            activityLog: [],
-        });
-        setSelectedTaskId(newTask.id);
+    const [addTaskAnchor, setAddTaskAnchor] = useState<{ x: number; y: number } | null>(null);
+
+    const handleAddTask = (e: React.MouseEvent) => {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setAddTaskAnchor({ x: rect.left, y: rect.bottom + 8 });
     };
 
     const tabs: { key: ActiveTab; label: string; icon: React.ElementType }[] = [
@@ -58,6 +49,8 @@ const EventTask = () => {
             <CalendarSidebar />
 
             <main className="flex flex-col flex-1 overflow-hidden">
+                <PageHeaderRight />
+                
                 {/* Tab Bar */}
                 <div className="border-b border-border bg-background px-4">
                     <div className="flex items-center gap-0">
@@ -110,6 +103,13 @@ const EventTask = () => {
                     </>
                 )}
             </main>
+            {addTaskAnchor && (
+                <AddTaskPopover
+                    x={addTaskAnchor.x}
+                    y={addTaskAnchor.y}
+                    onClose={() => setAddTaskAnchor(null)}
+                />
+            )}
         </div>
     );
 };
