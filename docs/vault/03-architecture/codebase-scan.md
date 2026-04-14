@@ -110,9 +110,13 @@ Flow is a self-hosted productivity platform (calendar, tasks, notes, contacts, j
 
 ---
 
+## Contacts Module
+
+Pre-namecard-OCR scan (2026-04-14) of `src/context/ContactContext.tsx`, `src/types/contact.ts`, and `src/components/contacts/{ContactDetail,NewContactForm,ScanCardForm,BatchUploadForm}.tsx` (4 components, 995 lines total; ContactDetail at 435 is the largest and approaches the 500-line ceiling). The module has **no persistence layer at all** — `ContactContext` initialises from a hard-coded `MOCK_CONTACTS` array and stores everything in `useState`, so contacts vanish on reload (no Supabase wiring, no localStorage, no `user_id` on the `Contact` type even though `public.contacts` requires one). Both OCR-facing forms (`ScanCardForm.handleExtract`, `BatchUploadForm.handleExtractAll`) are stubbed with `setTimeout` + hard-coded payloads and need to be wired to `flow-api`'s `/detect-card` + `/ocr` endpoints; `NewContactForm.prefill: Partial<Contact>` is the existing hand-off seam. Card images are stored as base64 data URLs throughout — a bloat risk before any Supabase write. The two latest migrations (011_note_metadata, 012_journal_focus_metadata) do **not** touch contacts; the canonical `public.contacts` table lives in `001_core_tables.sql` and has no OCR-specific columns yet. Full per-file breakdown in [[contacts-module]].
+
 ## Related
 
-- Registry: [[components]] · [[contexts]] · [[hooks]] · [[services]] · [[types]] · [[utilities]] · [[config]] · [[api-endpoints]] · [[supabase-tables]] · [[shared-packages]] · [[patterns]]
+- Registry: [[components]] · [[contexts]] · [[hooks]] · [[services]] · [[types]] · [[utilities]] · [[config]] · [[api-endpoints]] · [[supabase-tables]] · [[shared-packages]] · [[patterns]] · [[contacts-module]]
 - Architecture: [[dependency-map]] · [[dead-code-candidates]] · [[oversized-files]] · [[vault-health]]
 - ADR: [[adr-010-dual-mode-migration]]
 - Sync: [[workflow-state]]
