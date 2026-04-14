@@ -1,3 +1,45 @@
+export interface OcrResult {
+  name?: string | null;
+  title?: string | null;
+  company?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  phone_alt?: string | null;
+  address?: string | null;
+  website?: string | null;
+  language?: string | null;
+  raw_text: string;
+}
+
+export interface SocialEntry {
+  platform: string;
+  value: string;
+  label: string;
+}
+
+export interface PhoneEntry {
+  type: string; // 'mobile' | 'work' | 'home' | 'direct' | 'fax' | 'other'
+  value: string;
+  isPrimary: boolean;
+}
+
+export interface CropBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export type CardProcessorState =
+  | { status: 'idle' }
+  | { status: 'preprocessing' }
+  | { status: 'crop_pending'; imageUrl: string; detectedBounds?: CropBounds }
+  | { status: 'uploading' }
+  | { status: 'ocr_running' }
+  | { status: 'ocr_success'; front: OcrResult; back?: OcrResult }
+  | { status: 'ocr_partial'; front: OcrResult; back?: OcrResult; missingFields: string[] }
+  | { status: 'ocr_failure'; error: string };
+
 export interface Contact {
   id: string;
   displayName: string;
@@ -24,6 +66,17 @@ export interface Contact {
   linkedTaskIds?: string[];
   linkedNoteIds?: string[];
   color?: string;
+  front_image_url: string | null;
+  back_image_url: string | null;
+  front_ocr: OcrResult | null;
+  back_ocr: OcrResult | null;
+  alt_language: string | null;
+  socials: SocialEntry[];
+  phones: PhoneEntry[];
+  pipeline_stage: string;
+  bio: string | null;
+  deleted_at: string | null;
+  last_contacted_at: string | null;
 }
 
 export interface BatchCard {
