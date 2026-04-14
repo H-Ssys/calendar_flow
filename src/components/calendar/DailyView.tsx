@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { useCalendar, Event, isMultiDayEvent } from '@/context/CalendarContext';
+import { useNoteContext } from '@/context/NoteContext';
+import { NoteEditor } from '@/components/notes/NoteEditor';
 import { cn } from '@/lib/utils';
 import { EventCard } from './EventCard';
 import { DroppableTimeSlot } from './DroppableTimeSlot';
@@ -16,7 +18,7 @@ import {
     setMinutes,
 } from 'date-fns';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from '@dnd-kit/core';
-import { Copy, Save, ChevronDown, Plus, Check, X, Circle } from 'lucide-react';
+import { Copy, Save, ChevronDown, Plus, Check, X, Circle, FileText } from 'lucide-react';
 
 // ── Overlap detection ─────────────────────────────────────────────────
 interface EventColumn { column: number; totalColumns: number; }
@@ -87,6 +89,33 @@ interface DailyViewProps { onEventClick?: (event: Event) => void; }
 export const DailyView = ({ onEventClick }: DailyViewProps) => {
     const { events, currentDate, updateEvent, dailyTimeConfig, getCategoryColor, setPopoverState, dailyViewVariant } = useCalendar();
     const [activeId, setActiveId] = useState<string | null>(null);
+    const [noteWidth, setNoteWidth] = useState(520);
+    const isDragging = useRef(false);
+    const dragStartX = useRef(0);
+    const dragStartW = useRef(0);
+
+    const { addNote, activeNote } = useNoteContext();
+
+    const onDragHandleMouseDown = (e: React.MouseEvent) => {
+        isDragging.current  = true;
+        dragStartX.current  = e.clientX;
+        dragStartW.current  = noteWidth;
+        e.preventDefault();
+
+        const onMove = (mv: MouseEvent) => {
+            if (!isDragging.current) return;
+            // dragging left enlarges note panel
+            const delta = dragStartX.current - mv.clientX;
+            setNoteWidth(Math.min(900, Math.max(320, dragStartW.current + delta)));
+        };
+        const onUp = () => {
+            isDragging.current = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
 
     // Journal state
     const [journalTitle, setJournalTitle] = useState('Dreams and Hopes for This Year');
@@ -109,32 +138,27 @@ export const DailyView = ({ onEventClick }: DailyViewProps) => {
     const timedEvents  = dailyEvents.filter(e => !e.isAllDay && !isMultiDayEvent(e));
 
     // ── Timeline bounds ───────────────────────────────────────────────
-    const { timelineStartHour, timelineEndHour } = useMemo(() => {
-        let min = dailyTimeConfig.startHour, max = dailyTimeConfig.endHour;
-        for (const ev of timedEvents) {
-            const s = new Date(ev.startTime), e = new Date(ev.endTime);
-            if (s.getHours() < min) min = s.getHours();
-            const eh = e.getHours() + (e.getMinutes() > 0 ? 1 : 0);
-            if (eh > max) max = eh;
-        }
-        return { timelineStartHour: min, timelineEndHour: Math.min(max, 24) };
-    }, [timedEvents, dailyTimeConfig]);
-
     const HOUR_HEIGHT_PX = 100;
-    const totalHours = timelineEndHour - timelineStartHour;
-    const hours = useMemo(() =>
-        Array.from({ length: totalHours }, (_, i) => {
-            const h = i + timelineStartHour;
-            return { label: `${String(h).padStart(2, '0')}:00`, hour: h };
-        }),
-        [totalHours, timelineStartHour]);
+    const { startHour, endHour, hourInterval } = dailyTimeConfig;
+    const totalHours = endHour - startHour;
+
+    // Build rows — one row per interval step (e.g. 06, 08, 10... for interval=2)
+    const hours = useMemo(() => {
+        const rows: { label: string; hour: number }[] = [];
+        for (let h = startHour; h < endHour; h += hourInterval) {
+            rows.push({ label: `${String(h).padStart(2, '0')}:00`, hour: h });
+        }
+        return rows;
+    }, [startHour, endHour, hourInterval]);
 
     const eventColumns = useMemo(() => calculateEventColumns(timedEvents), [timedEvents]);
 
     const getEventStyle = (event: Event) => {
         const s = new Date(event.startTime), e = new Date(event.endTime);
-        const top = ((s.getHours() - timelineStartHour) * 60 + s.getMinutes()) / 60 * HOUR_HEIGHT_PX;
-        const height = Math.max(differenceInMinutes(e, s) / 60 * HOUR_HEIGHT_PX, 20);
+        // Each row covers hourInterval hours; scale positions accordingly
+        const pxPerHour = HOUR_HEIGHT_PX / hourInterval;
+        const top = ((s.getHours() - startHour) * 60 + s.getMinutes()) / 60 * pxPerHour;
+        const height = Math.max(differenceInMinutes(e, s) / 60 * pxPerHour, 20);
         const col = eventColumns.get(event.id) ?? { column: 0, totalColumns: 1 };
         return {
             top: `${top}px`,
@@ -213,7 +237,7 @@ export const DailyView = ({ onEventClick }: DailyViewProps) => {
 
                     {/* Scrollable grid */}
                     <div className="flex-1 overflow-y-auto relative bg-background">
-                        <div className="relative" style={{ height: `${totalHours * HOUR_HEIGHT_PX}px` }}>
+                        <div className="relative" style={{ height: `${hours.length * HOUR_HEIGHT_PX}px` }}>
                             {/* Hour rows */}
                             {hours.map(({ label, hour }, i) => (
                                 <div key={label} className="absolute left-0 right-0 flex" style={{ top: `${i * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}>
@@ -261,18 +285,29 @@ export const DailyView = ({ onEventClick }: DailyViewProps) => {
                     </div>
                 </div>
 
-                {/* Right pane — tasks list placeholder */}
-                <div className="w-72 shrink-0 flex flex-col bg-card/20 border-l border-border">
-                    <div className="h-10 border-b border-border flex items-center px-3">
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today's Tasks</span>
-                    </div>
-                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
-                        <p className="text-xs text-muted-foreground/60">No tasks for today</p>
-                        <button
-                            onClick={e => setPopoverState({ type: 'task', x: e.clientX, y: e.clientY, date: new Date() })}
-                            className="mt-3 text-xs text-primary hover:underline"
-                        >+ Add Task</button>
-                    </div>
+                {/* Draggable resize handle */}
+                <div
+                    onMouseDown={onDragHandleMouseDown}
+                    className="w-1.5 shrink-0 cursor-col-resize bg-border hover:bg-primary/40 transition-colors active:bg-primary/60"
+                    title="Drag to resize"
+                />
+
+                {/* Right pane — NoteEditor only */}
+                <div className="shrink-0 flex flex-col overflow-hidden border-l border-border" style={{ width: noteWidth }}>
+                    {activeNote ? (
+                        <NoteEditor note={activeNote} />
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center px-4 gap-3">
+                            <FileText className="w-10 h-10 text-muted-foreground/20" />
+                            <p className="text-xs text-muted-foreground/60">Select or create a note</p>
+                            <button
+                                onClick={() => addNote({ linkedDate: currentDate, title: `Note – ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` })}
+                                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                            >
+                                <Plus className="w-3 h-3" /> New note
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 

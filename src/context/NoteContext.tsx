@@ -133,9 +133,8 @@ export const NoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             noteSupabaseService.createNote(userId, v2Note).then((row) => {
                 metadataByNoteId.current[row.id] = row.metadata ?? {};
             }).catch((err) => {
-                console.error('[NoteContext] Supabase createNote failed, rolling back:', err);
-                setNotes(prev => prev.filter(n => n.id !== newNote.id));
-                if (activeNoteIdRef.current === newNote.id) setActiveNoteId(null);
+                // Log but do NOT rollback — keep the note in local state so the user doesn't lose work.
+                console.error('[NoteContext] Supabase createNote failed (note kept locally):', err);
             });
         }
 

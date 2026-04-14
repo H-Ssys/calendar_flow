@@ -74,7 +74,7 @@ export const TopActionBar: React.FC<TopActionBarProps> = ({ onAddEvent }) => {
 
   return (
     <div>
-      <header className="flex items-center justify-between px-4 h-12 border-b border-border bg-background shrink-0">
+      <header className="relative flex items-center justify-between px-4 h-12 border-b border-border bg-background shrink-0">
 
         {/* Left — date nav */}
         <div className="flex items-center gap-3">
@@ -96,8 +96,8 @@ export const TopActionBar: React.FC<TopActionBarProps> = ({ onAddEvent }) => {
           </div>
         </div>
 
-        {/* Centre — view switcher */}
-        <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg gap-0.5">
+        {/* Centre — view switcher, absolutely centred to full page width */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-muted border border-border p-0.5 rounded-lg gap-0.5">
           {viewOptions.map(v => (
             <button
               key={v}
@@ -162,35 +162,27 @@ export const TopActionBar: React.FC<TopActionBarProps> = ({ onAddEvent }) => {
             )}
           </div>
 
-          <button className="flex h-8 items-center gap-1 text-muted-foreground text-xs font-medium mx-1 px-2 hover:bg-muted bg-background border border-border shadow-sm rounded-md transition-colors">
-            <Zap className="w-3.5 h-3.5" />
-            Availability
-          </button>
-
+          {/* Availability — icon only */}
           <button
-            onClick={(e) => {
-              if (onAddEvent) {
-                onAddEvent();
-              } else {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setPopoverState({ type: 'event', x: rect.left - 200, y: rect.bottom + 10, date: new Date() });
-              }
-            }}
-            className="flex h-8 items-center gap-1.5 text-white text-xs font-semibold bg-primary px-3 rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
+            className="p-1.5 hover:bg-muted rounded transition-colors"
+            title="Availability"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add Event
+            <Zap className="w-[18px] h-[18px] text-muted-foreground" />
           </button>
         </div>
       </header>
 
+      {/* Sub-bar: Timeline / Journal toggle — centered under the calendar bar */}
       {currentView === 'daily' && (
-        <div className="flex justify-center border-b border-border bg-background py-1.5">
-          <div className="flex items-center border bg-muted p-0.5 rounded-lg border-border">
+        <div className="flex items-center justify-center border-b border-border bg-background h-9">
+          <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg gap-0.5">
             <button
               onClick={() => setDailyViewVariant('timeline')}
-              className={cn('flex h-7 justify-center items-center gap-1.5 min-w-[100px] text-xs font-medium px-3 rounded-md transition-all',
-                dailyViewVariant === 'timeline' ? 'shadow-sm text-foreground font-semibold bg-background' : 'text-muted-foreground hover:text-foreground'
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-4 text-xs font-medium rounded-md transition-all',
+                dailyViewVariant === 'timeline'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <Calendar className="w-3.5 h-3.5" />
@@ -198,8 +190,11 @@ export const TopActionBar: React.FC<TopActionBarProps> = ({ onAddEvent }) => {
             </button>
             <button
               onClick={() => setDailyViewVariant('journal')}
-              className={cn('flex h-7 justify-center items-center gap-1.5 min-w-[100px] text-xs font-medium px-3 rounded-md transition-all',
-                dailyViewVariant === 'journal' ? 'shadow-sm text-foreground font-semibold bg-background' : 'text-muted-foreground hover:text-foreground'
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-4 text-xs font-medium rounded-md transition-all',
+                dailyViewVariant === 'journal'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <BookOpen className="w-3.5 h-3.5" />

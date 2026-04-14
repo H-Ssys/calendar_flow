@@ -122,7 +122,16 @@ export const AddTaskPopover: React.FC<AddTaskPopoverProps> = ({ x, y, onClose, d
                   <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                 </div>
                 <div className="border border-border rounded-md px-2 py-1.5 flex items-center gap-1.5 bg-background cursor-pointer hover:bg-muted/30 w-[90px]">
-                  <span className="text-xs text-foreground flex-1 text-center">06:00 AM</span>
+                  <span className="text-xs text-foreground flex-1 text-center">
+                    {(() => {
+                      const d = defaultDate || new Date();
+                      const h = d.getHours();
+                      const m = String(d.getMinutes()).padStart(2, '0');
+                      const ampm = h >= 12 ? 'PM' : 'AM';
+                      const h12 = h % 12 || 12;
+                      return `${String(h12).padStart(2,'0')}:${m} ${ampm}`;
+                    })()}
+                  </span>
                   <Clock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                 </div>
               </div>

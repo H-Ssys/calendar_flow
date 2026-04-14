@@ -36,14 +36,7 @@ const Index = () => {
     setSelectedEventForDetail(event);
   };
 
-  const handleCellClick = (date: Date) => {
-    setPopoverState({
-      type: 'event',
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-      date,
-    });
-  };
+
 
   return (
     <div className="flex w-full h-screen bg-background overflow-hidden relative">
@@ -67,7 +60,7 @@ const Index = () => {
         ) : currentView === 'yearly' ? (
           <YearlyView />
         ) : (
-          <WeeklyView onEventClick={handleEventClick} onCellClick={handleCellClick} />
+          <WeeklyView onEventClick={handleEventClick} />
         )}
       </main>
 

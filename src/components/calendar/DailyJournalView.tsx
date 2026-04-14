@@ -634,90 +634,19 @@ export const DailyJournalView: React.FC<DailyJournalViewProps> = ({ onEventClick
                                   </div>
                                 ) : null;
                               })()}
-                              {/* Add Task + Event */}
-                              <div className="flex flex-col gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                      const slotDate = new Date(currentDate);
-                                      const [hour, min] = slot.startTime.split(':').map(Number);
-                                      slotDate.setHours(hour, min, 0, 0);
-                                      setPopoverState({ type: 'event', x: e.clientX, y: e.clientY, date: slotDate });
-                                  }}
-                                  className="h-6 text-[10px] text-muted-foreground hover:text-foreground flex-1 justify-start px-2 gap-1 w-fit mt-1"
-                                >
-                                  <Plus className="w-2.5 h-2.5" /> Add event
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                      const slotDate = new Date(currentDate);
-                                      const [hour, min] = slot.startTime.split(':').map(Number);
-                                      slotDate.setHours(hour, min, 0, 0);
-                                      setPopoverState({ type: 'task', x: e.clientX, y: e.clientY, date: slotDate });
-                                  }}
-                                  className="h-6 text-[10px] text-muted-foreground hover:text-foreground flex-1 justify-start px-2 gap-1 w-fit mb-1"
-                                >
-                                  <Plus className="w-2.5 h-2.5" /> Add Task
-                                </Button>
-                              </div>
-                              <div className="flex gap-1 mt-1">
-                                <div className="relative">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setLinkEventSlotId(linkEventSlotId === slot.id ? null : slot.id)}
-                                    className="h-7 text-xs text-muted-foreground hover:text-foreground px-2 gap-1"
-                                    title="Link calendar event"
-                                  >
-                                    <Link2 className="w-3 h-3" /> Link Events
-                                  </Button>
-                                  {linkEventSlotId === slot.id && (
-                                    <div className="absolute z-50 top-8 left-0 w-60 bg-popover border border-border rounded-lg shadow-lg p-2 space-y-1">
-                                      <Input
-                                        placeholder="Search events..."
-                                        value={linkEventSearch}
-                                        onChange={(e) => setLinkEventSearch(e.target.value)}
-                                        className="h-7 text-xs mb-1"
-                                        autoFocus
-                                      />
-                                      <div className="max-h-32 overflow-y-auto space-y-0.5">
-                                        {todayEvents
-                                          .filter(ev => !(slot.linkedEventIds || []).includes(ev.id))
-                                          .filter(ev => !linkEventSearch || ev.title.toLowerCase().includes(linkEventSearch.toLowerCase()))
-                                          .slice(0, 8)
-                                          .map(ev => (
-                                            <button
-                                              key={ev.id}
-                                              className="w-full text-left px-2 py-1 rounded text-xs hover:bg-accent flex items-center gap-1.5 transition-colors"
-                                              onClick={() => {
-                                                updateTimeSlot(slot.id, {
-                                                  linkedEventIds: [...(slot.linkedEventIds || []), ev.id],
-                                                });
-                                                setLinkEventSlotId(null);
-                                                setLinkEventSearch('');
-                                              }}
-                                            >
-                                              <span
-                                                className="w-2 h-2 rounded-full flex-shrink-0"
-                                                style={{ backgroundColor: ev.color || '#60a5fa' }}
-                                              />
-                                              <span className="truncate">{ev.title}</span>
-                                              <span className="text-[10px] text-muted-foreground ml-auto">
-                                                {ev.startTime ? format(new Date(ev.startTime), 'HH:mm') : ''}
-                                              </span>
-                                            </button>
-                                          ))}
-                                        {todayEvents.filter(ev => !(slot.linkedEventIds || []).includes(ev.id)).length === 0 && (
-                                          <p className="text-xs text-muted-foreground text-center py-2">No events to link</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                              {/* Add Flow button — opens FlowMenu for this time slot */}
+                              <button
+                                onClick={(e) => {
+                                  const slotDate = new Date(currentDate);
+                                  const [hour, min] = slot.startTime.split(':').map(Number);
+                                  slotDate.setHours(hour, min, 0, 0);
+                                  setPopoverState({ type: 'menu', x: e.clientX, y: e.clientY, date: slotDate });
+                                }}
+                                className="mt-1 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-fit"
+                              >
+                                <Plus className="w-2.5 h-2.5" />
+                                Add Flow
+                              </button>
                             </td>
                             <td className="p-1.5">
                               <div className="relative">

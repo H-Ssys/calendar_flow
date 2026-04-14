@@ -68,7 +68,17 @@ export const AddEventPopover: React.FC<AddEventPopoverProps> = ({ x, y, onClose,
               <button type="button" className="flex items-center gap-2 w-full px-2.5 py-1.5 text-foreground hover:bg-muted transition-colors">
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                 <span className="flex-1 text-left text-xs font-medium">Date and Time</span>
-                <span className="text-[11px] text-muted-foreground">Today · 06:00 – 07:00</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {(() => {
+                    const d = defaultDate || new Date();
+                    const isToday = new Date().toDateString() === d.toDateString();
+                    const dateLabel = isToday ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    const hh = String(d.getHours()).padStart(2, '0');
+                    const mm = String(d.getMinutes()).padStart(2, '0');
+                    const endH = String(d.getHours() + 1).padStart(2, '0');
+                    return `${dateLabel} · ${hh}:${mm} – ${endH}:${mm}`;
+                  })()}
+                </span>
               </button>
             </div>
 
