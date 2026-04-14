@@ -114,6 +114,51 @@ CREATE TABLE IF NOT EXISTS public.contact_references (
 PK is already UNIQUE; CHECK enforces canonical ordering so the pair
 (A,B) and (B,A) cannot both exist.
 
+### contact_references RLS — EXISTS-based double-join
+`contact_references` has no `user_id` column, so a plain
+`user_id = auth.uid()` policy is impossible. Ownership is derived from
+the underlying `contacts` rows instead:
+
+```sql
+ALTER TABLE public.contact_references ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users own both sides of reference"
+ON public.contact_references
+FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM public.contacts
+    WHERE id = contact_references.source_contact_id
+      AND user_id = auth.uid()
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.contacts
+    WHERE id = contact_references.target_contact_id
+      AND user_id = auth.uid()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.contacts
+    WHERE id = contact_references.source_contact_id
+      AND user_id = auth.uid()
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.contacts
+    WHERE id = contact_references.target_contact_id
+      AND user_id = auth.uid()
+  )
+);
+```
+
+Both `USING` and `WITH CHECK` are required: `USING` gates which rows are
+visible on SELECT/UPDATE/DELETE; `WITH CHECK` gates INSERT/UPDATE writes.
+`USING` alone would not stop a malicious INSERT.
+
+Both EXISTS clauses are required (joined with `AND`): a single-side
+check would let User A link their own contact to User B's contact by
+supplying User B's UUID as the `target_contact_id`.
+
 ### active_contacts view
 ```
 CREATE OR REPLACE VIEW public.active_contacts
@@ -158,3 +203,19 @@ trigger stays scoped to reference changes.
 - Search queries use `OR` across both columns:
   `search_text @@ q OR reference_search_text @@ q`.
 - Cross-card OCR text now searchable, which was the whole point.
+
+## Security correction (post-audit A4)
+
+`contact_references` has no `user_id` column. An earlier draft suggested a
+simple `user_id = auth.uid()` RLS policy, which is impossible on this
+table shape. Replaced with the EXISTS-based double-join defined in the
+"contact_references RLS" subsection above. Both `USING` and `WITH CHECK`
+are required (USING alone does not block INSERTs), and both EXISTS
+clauses are required (single-side check allows cross-user linkage).
+
+Environment verification completed on the VPS Supabase instance
+(`supabase-db-k14ezjygmt5klmcegmnex0h8`):
+- `SELECT version();` → PostgreSQL 15.8 — `security_invoker` views supported.
+- `SELECT storage.foldername('u/c/front.jpg');` → `{u,c}` — the folder-pinned
+  bucket policy pattern is available for A6 (note: `foldername()` returns
+  only directory segments, not the filename — `[1]` is still the user UUID).
