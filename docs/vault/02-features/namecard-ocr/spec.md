@@ -44,6 +44,7 @@ status: in_progress
 
 | Task | Agent | Key constraint |
 |------|-------|---------------|
+| D0-pre: Schema reconciliation | Backend Engineer | Write migration 013b_schema_reconcile.sql to bring git in sync with live DB (contact_embeddings, contact_events, contact_notes, contact_tasks, full_name, contacts_name_trgm_idx, pipeline_stage CHECK, pre-existing `contact-cards` singular public bucket + `auth_upload` policy). Run pg_dump --schema-only on live DB, compare against git migrations, write the delta as a migration file. Acceptance: `supabase db diff` returns empty after applying 013b. |
 | D0: Refactor ContactDetail.tsx | Refactor Specialist | Currently 435 lines — split before Phase D additions push it over 500 |
 | D1: ContactCardImages | Antigravity | Replace base64 URLs with Supabase Storage URLs |
 | D2: SocialPlatforms | Antigravity | jsonb array stored in contacts.socials |
