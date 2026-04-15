@@ -2,3 +2,6 @@ packages:
   - 'calendar-main'
   - 'packages/*'
   - 'backend'
+allowBuilds:
+  '@swc/core': true
+  esbuild: true

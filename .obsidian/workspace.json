@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "0b667815fb43187e",
+        "id": "06786300698f308b",
         "type": "tabs",
         "children": [
           {
-            "id": "b96b2ed974ff6968",
+            "id": "038fbfc35350fb63",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -176,8 +176,20 @@
       "bases:Create new base": false
     }
   },
-  "active": "b96b2ed974ff6968",
+  "active": "038fbfc35350fb63",
   "lastOpenFiles": [
+    "pnpm-lock.yaml",
+    "_tmp_20504_01fb7e5eca58973d369f3e36cabdaeca",
+    "pnpm-lock.yaml.234667805",
+    "_tmp_15964_d14c9bdbe8667ea4bd39dba3e4451fcd",
+    "dist/index.html",
+    "dist/assets/upload-TuHXndlY.js",
+    "dist/assets/Teams-CDYcXp5j.js",
+    "dist/assets/TaskDetail-CGY3gft6.js",
+    "dist/assets/TaskContext-BzLGfu5f.js",
+    "dist/assets/star-BaC6RSYh.js",
+    "dist/assets/square-check-big-ClsWWeZ1.js",
+    "node_modules/@radix-ui/react-aspect-ratio/node_modules/@radix-ui/react-primitive/README.md",
     "Untitled.canvas",
     "Untitled 1.canvas",
     "Untitled 2.canvas",
@@ -187,13 +199,7 @@
     "2026-04-11.md",
     "docs/vault/templates/adr.md",
     "docs/vault/templates/scan-summary.md",
-    "vite.config.ts",
-    "src/pages/Signup.tsx",
-    "src/pages/Login.tsx",
-    "src/context/AuthContext.tsx",
-    "pnpm-lock.yaml",
     "docs/vault/03-architecture/adr/adr-010-dual-mode-migration.md",
-    "docs/vault/03-architecture/adr",
     "docs/vault/06-design/system.md",
     "docs/vault/03-architecture/code-registry/shared-packages.md",
     "docs/vault/03-architecture/code-registry/config.md"
