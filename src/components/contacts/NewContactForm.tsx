@@ -1,12 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useContactContext } from '@/context/ContactContext';
 import { Contact, CONTACT_COLORS } from '@/types/contact';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Upload, User, Building2, Phone, Mail, MapPin, X } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { User, Building2, Phone, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CardCropEditor } from '@/components/contacts/CardCropEditor';
+import { useCardProcessor } from '@/hooks/useCardProcessor';
 
 interface NewContactFormProps {
   open: boolean;
@@ -14,42 +26,12 @@ interface NewContactFormProps {
   prefill?: Partial<Contact>;
 }
 
-interface ImageDropZoneProps {
-  label: string;
-  value?: string;
-  onChange: (url: string) => void;
+function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first: '', last: '' };
+  if (parts.length === 1) return { first: parts[0], last: '' };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
 }
-
-const ImageDropZone: React.FC<ImageDropZoneProps> = ({ label, value, onChange }) => {
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => onChange(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</div>
-      <label className={cn(
-        "aspect-[3.5/2] flex flex-col items-center justify-center rounded-lg cursor-pointer transition-colors",
-        "border-2 border-dashed border-border hover:bg-primary/5 hover:border-primary/30",
-        value ? "p-0 overflow-hidden" : "gap-2"
-      )}>
-        {value ? (
-          <img src={value} alt={label} className="w-full h-full object-cover" />
-        ) : (
-          <>
-            <Upload className="w-6 h-6 text-muted-foreground/40" />
-            <span className="text-xs text-muted-foreground text-center px-2">Click or drag image</span>
-          </>
-        )}
-        <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
-      </label>
-    </div>
-  );
-};
 
 export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, prefill }) => {
   const { addContact } = useContactContext();
@@ -71,7 +53,87 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
   const [note, setNote] = useState(prefill?.note || '');
   const [color, setColor] = useState(prefill?.color || CONTACT_COLORS[0]);
 
+  // OCR upload + consent state
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
+  const [frontPreview, setFrontPreview] = useState<string | null>(
+    prefill?.frontCardImage || null,
+  );
+  const [backPreview, setBackPreview] = useState<string | null>(
+    prefill?.backCardImage || null,
+  );
+  const [frontBlob, setFrontBlob] = useState<Blob | null>(null);
+  const [backBlob, setBackBlob] = useState<Blob | null>(null);
+  const [showCropEditor, setShowCropEditor] = useState(false);
+  const [currentSide, setCurrentSide] = useState<'front' | 'back'>('front');
+  const [showOcrConsent, setShowOcrConsent] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+
+  const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'new' });
+
   const displayName = [firstName, lastName].filter(Boolean).join(' ') || 'New Contact';
+
+  const handleImageSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    side: 'front' | 'back',
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCurrentSide(side);
+    setOcrError(null);
+    await processFile(file);
+    setShowCropEditor(true);
+    e.target.value = '';
+  };
+
+  const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
+    setShowCropEditor(false);
+    const url = URL.createObjectURL(blob);
+    if (side === 'front') {
+      setFrontBlob(blob);
+      setFrontPreview(url);
+      setFrontCardImage(url);
+    } else {
+      setBackBlob(blob);
+      setBackPreview(url);
+      setBackCardImage(url);
+    }
+    if (side === 'front') setShowOcrConsent(true);
+  };
+
+  const handleAutoFill = async () => {
+    setShowOcrConsent(false);
+    if (!frontBlob) return;
+    await confirmCrop(frontBlob, 'front');
+    if (backBlob) await confirmCrop(backBlob, 'back');
+  };
+
+  const handleManualEntry = () => {
+    setShowOcrConsent(false);
+    resetProcessor();
+  };
+
+  useEffect(() => {
+    if (state.status === 'ocr_success' || state.status === 'ocr_partial') {
+      const { first, last } = splitName(state.front.name ?? '');
+      if (first) setFirstName(first);
+      if (last) setLastName(last);
+      if (state.front.email) setEmail(state.front.email);
+      if (state.front.phone) setPhone(state.front.phone);
+      if (state.front.company) setCompany(state.front.company);
+      if (state.front.title) setJobTitle(state.front.title);
+      if (state.front.address) setAddress(state.front.address);
+      if (state.front.website) setWebsite(state.front.website);
+      setMissingFields(state.status === 'ocr_partial' ? state.missingFields : []);
+      setOcrError(null);
+    }
+    if (state.status === 'ocr_failure') {
+      setOcrError(state.error || "Card couldn't be read — filling manually");
+      setMissingFields([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   const handleCreate = () => {
     addContact({
@@ -125,11 +187,62 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
         </DialogHeader>
 
         <div className="px-6 py-4 space-y-5 max-h-[65vh] overflow-y-auto">
-          {/* Business Card Images */}
-          <div className="grid grid-cols-2 gap-4">
-            <ImageDropZone label="Front Card" value={frontCardImage} onChange={setFrontCardImage} />
-            <ImageDropZone label="Back Card" value={backCardImage} onChange={setBackCardImage} />
+          {/* Business Card Upload (with OCR) */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div
+              className="border-2 border-dashed border-border rounded-lg aspect-[1.75/1] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors text-sm text-muted-foreground overflow-hidden"
+              onClick={() => frontInputRef.current?.click()}
+            >
+              {frontPreview ? (
+                <img src={frontPreview} alt="Front" className="w-full h-full object-cover rounded-lg" />
+              ) : (
+                <span>Front side</span>
+              )}
+            </div>
+            <div
+              className="border-2 border-dashed border-border rounded-lg aspect-[1.75/1] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors text-sm text-muted-foreground overflow-hidden"
+              onClick={() => backInputRef.current?.click()}
+            >
+              {backPreview ? (
+                <img src={backPreview} alt="Back" className="w-full h-full object-cover rounded-lg" />
+              ) : (
+                <span>Back side (optional)</span>
+              )}
+            </div>
           </div>
+
+          <input
+            ref={frontInputRef}
+            type="file"
+            accept="image/*,.heic"
+            hidden
+            onChange={e => handleImageSelect(e, 'front')}
+          />
+          <input
+            ref={backInputRef}
+            type="file"
+            accept="image/*,.heic"
+            hidden
+            onChange={e => handleImageSelect(e, 'back')}
+          />
+
+          {state.status === 'ocr_running' && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm text-primary">
+              Reading card…
+            </div>
+          )}
+
+          {missingFields.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+              Some fields were empty: {missingFields.join(', ')}. Please review.
+            </div>
+          )}
+
+          {ocrError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {ocrError}
+            </div>
+          )}
 
           {/* Identity */}
           <section className="space-y-2">
@@ -198,6 +311,36 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <CardCropEditor
+        isOpen={showCropEditor}
+        imageSrc={state.status === 'crop_pending' ? state.imageUrl : ''}
+        initialBounds={state.status === 'crop_pending' ? state.detectedBounds : undefined}
+        onConfirm={(blob) => handleCropConfirm(blob, currentSide)}
+        onRedo={() => {
+          setShowCropEditor(false);
+          resetProcessor();
+        }}
+      />
+
+      <AlertDialog open={showOcrConsent}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Auto-fill from this card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Fields can be edited after. Back side will also be read if you added one.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleManualEntry}>
+              Enter manually
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleAutoFill}>
+              Fill automatically
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };
