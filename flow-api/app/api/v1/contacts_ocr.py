@@ -12,6 +12,8 @@ from PIL import Image
 
 from app.core.security import verify_token
 
+MAX_BATCH_CARDS = 50
+
 router = APIRouter()
 
 BATCH_SEMAPHORE = asyncio.Semaphore(5)
@@ -124,3 +126,42 @@ async def extract_card(
 
     processing_ms = int((time.perf_counter() - started) * 1000)
     return {"front": front_res, "back": back_res, "processing_ms": processing_ms}
+
+
+# ─── BATCH OCR (synchronous fallback — no Celery/Redis in this project) ──────
+#
+# Cards are processed inline using BATCH_SEMAPHORE for concurrency control.
+# asyncio.gather across all cards; the semaphore (5) caps in-flight Gemini
+# calls. No job_id persistence → /status always returns 404.
+
+
+@router.post("/contacts/ocr/batch")
+async def extract_batch(
+    card_images: list[UploadFile] = File(...),
+    user_id: str = Form(...),
+    _user=Depends(verify_token),
+):
+    if not card_images:
+        raise HTTPException(status_code=400, detail="card_images is empty")
+    if len(card_images) > MAX_BATCH_CARDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(card_images)} exceeds max {MAX_BATCH_CARDS}",
+        )
+
+    started = time.perf_counter()
+    card_bytes = [await c.read() for c in card_images]
+    results = await asyncio.gather(*(_call_gemini(b) for b in card_bytes))
+    processing_ms = int((time.perf_counter() - started) * 1000)
+
+    return {
+        "status": "done",
+        "progress": {"done": len(results), "total": len(results)},
+        "results": results,
+        "processing_ms": processing_ms,
+    }
+
+
+@router.get("/contacts/ocr/status/{job_id}")
+async def batch_status(job_id: str, _user=Depends(verify_token)):
+    raise HTTPException(status_code=404, detail="Job not found")
