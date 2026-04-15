@@ -148,9 +148,17 @@ const ContactsInner: React.FC = () => {
                         {letter}
                       </div>
                       {group.map(contact => (
-                        <button
+                        <div
                           key={contact.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedId(contact.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedId(contact.id);
+                            }
+                          }}
                           className={cn(
                             "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-all group mb-0.5 border text-left",
                             selectedId === contact.id
@@ -181,7 +189,7 @@ const ContactsInner: React.FC = () => {
                               <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
                             </button>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   ))}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Check } from 'lucide-react';
 
@@ -37,6 +37,7 @@ export function CardCropEditor({
         className="max-w-[740px] w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] p-0 flex flex-col gap-0 border-0 sm:border overflow-hidden"
       >
         <DialogTitle className="sr-only">Crop Image</DialogTitle>
+        <DialogDescription className="sr-only">Crop and adjust your scanned namecard image before processing</DialogDescription>
         
         {/* Main Editor Area */}
         <div className="flex-1 min-h-0 bg-neutral-100 flex flex-col items-center justify-center p-4">
