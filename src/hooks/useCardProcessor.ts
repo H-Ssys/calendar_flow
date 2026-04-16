@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { supabase } from '@ofative/supabase-client';
 import type {
   CardProcessorState,
   CropBounds,
@@ -20,9 +21,11 @@ const MOCK_OCR: OcrResult = {
 
 const FALLBACK_BOUNDS: CropBounds = { left: 5, top: 5, width: 90, height: 90 };
 
-// Placeholder — wired in C5 (auth integration)
-function getCurrentUserId(): string {
-  return '';
+async function getAuthHeader(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Not authenticated — please sign in');
+  return `Bearer ${token}`;
 }
 
 export async function preprocessImage(file: File): Promise<Blob> {
@@ -160,12 +163,19 @@ async function runOCR(
     return { front: MOCK_OCR, back: backBlob ? MOCK_OCR : undefined };
   }
 
+  const authHeader = await getAuthHeader();
+  const { data: { user } } = await supabase.auth.getUser();
+
   const form = new FormData();
   form.append('front_image', frontBlob, 'front.jpg');
   if (backBlob) form.append('back_image', backBlob, 'back.jpg');
-  form.append('user_id', getCurrentUserId());
+  form.append('user_id', user?.id ?? '');
 
-  const res = await fetch('/api/contacts/ocr', { method: 'POST', body: form });
+  const res = await fetch('/api/contacts/ocr', {
+    method: 'POST',
+    body: form,
+    headers: { Authorization: authHeader },
+  });
   if (!res.ok) throw new Error(`OCR failed: ${res.status}`);
   return res.json();
 }
