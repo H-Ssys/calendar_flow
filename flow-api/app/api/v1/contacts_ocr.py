@@ -62,7 +62,7 @@ def _encode_jpeg(image_bytes: bytes) -> str:
 
 async def _call_gemini(image_bytes: bytes) -> dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY", "")
-    model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
 
