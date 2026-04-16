@@ -82,9 +82,8 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
     if (!file) return;
     setCurrentSide(side);
     setOcrError(null);
-    await processFile(file);
-    setShowCropEditor(true);
     e.target.value = '';
+    await processFile(file);
   };
 
   const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
@@ -113,6 +112,13 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
     setShowOcrConsent(false);
     resetProcessor();
   };
+
+  // Auto-open the crop editor the moment preprocessing finishes.
+  useEffect(() => {
+    if (state.status === 'crop_pending') {
+      setShowCropEditor(true);
+    }
+  }, [state.status]);
 
   useEffect(() => {
     if (state.status === 'ocr_success' || state.status === 'ocr_partial') {

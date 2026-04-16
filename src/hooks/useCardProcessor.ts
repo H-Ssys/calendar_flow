@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { supabase } from '@ofative/supabase-client';
 import type {
   CardProcessorState,
@@ -141,15 +141,21 @@ export async function detectCardBounds(imageUrl: string): Promise<CropBounds> {
       }
     }
 
-    if (right <= left || bottom <= top) return FALLBACK_BOUNDS;
+    if (right <= left || bottom <= top) {
+      console.log('detectCardBounds result:', FALLBACK_BOUNDS, '(fallback)');
+      return FALLBACK_BOUNDS;
+    }
 
-    return {
+    const bounds: CropBounds = {
       left: (left / width) * 100,
       top: (top / height) * 100,
       width: ((right - left) / width) * 100,
       height: ((bottom - top) / height) * 100,
     };
+    console.log('detectCardBounds result:', bounds);
+    return bounds;
   } catch {
+    console.log('detectCardBounds result:', FALLBACK_BOUNDS, '(error fallback)');
     return FALLBACK_BOUNDS;
   }
 }
@@ -222,12 +228,22 @@ export function useCardProcessor(
   _options?: UseCardProcessorOptions,
 ): UseCardProcessorReturn {
   const [state, setState] = useState<CardProcessorState>({ status: 'idle' });
+  const currentUrlRef = useRef<string | null>(null);
+
+  const revokeCurrentUrl = () => {
+    if (currentUrlRef.current) {
+      URL.revokeObjectURL(currentUrlRef.current);
+      currentUrlRef.current = null;
+    }
+  };
 
   const processFile = useCallback(async (file: File): Promise<void> => {
     try {
+      revokeCurrentUrl();
       setState({ status: 'preprocessing' });
       const processed = await preprocessImage(file);
       const imageUrl = URL.createObjectURL(processed);
+      currentUrlRef.current = imageUrl;
       const detectedBounds = await detectCardBounds(imageUrl);
       setState({ status: 'crop_pending', imageUrl, detectedBounds });
     } catch (err) {
@@ -241,7 +257,7 @@ export function useCardProcessor(
   const confirmCrop = useCallback(
     async (croppedBlob: Blob, side: 'front' | 'back'): Promise<void> => {
       try {
-        setState({ status: 'uploading' });
+        revokeCurrentUrl();
         setState({ status: 'ocr_running' });
         const result =
           side === 'front'
@@ -270,6 +286,7 @@ export function useCardProcessor(
   );
 
   const reset = useCallback((): void => {
+    revokeCurrentUrl();
     setState({ status: 'idle' });
   }, []);
 

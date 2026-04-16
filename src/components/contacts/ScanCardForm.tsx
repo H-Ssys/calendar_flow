@@ -18,20 +18,19 @@ interface ScanCardFormProps {
 interface CardSlotProps {
   side: 'Front' | 'Back';
   image?: string;
-  onCapture: (dataUrl: string) => void;
+  onPickFile: (file: File) => void;
   onCropClick?: () => void;
   primary?: boolean;
 }
 
-const CardSlot: React.FC<CardSlotProps> = ({ side, image, onCapture, onCropClick, primary }) => {
+const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClick, primary }) => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => onCapture(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    onPickFile(file);
+    e.target.value = '';
   };
 
   return (
@@ -83,7 +82,8 @@ const CardSlot: React.FC<CardSlotProps> = ({ side, image, onCapture, onCropClick
 
 export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExtracted }) => {
   const { addContact } = useContactContext();
-  const { state, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'scan' });
+  const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'scan' });
+
   const [frontImage, setFrontImage] = useState('');
   const [backImage, setBackImage] = useState('');
   const [frontBlob, setFrontBlob] = useState<Blob | null>(null);
@@ -95,36 +95,49 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
 
   // Crop editor state
   const [cropOpen, setCropOpen] = useState(false);
-  const [cropSrc, setCropSrc] = useState('');
-  // Which slot triggered the crop ('front' | 'back')
+  // Track which slot is currently in the crop editor
   const cropSlotRef = useRef<'front' | 'back'>('front');
+  // Track the original File per side so re-cropping from a thumbnail re-runs processFile
+  const frontFileRef = useRef<File | null>(null);
+  const backFileRef = useRef<File | null>(null);
 
-  const openCropFor = (side: 'front' | 'back') => {
-    const src = side === 'front' ? frontImage : backImage;
-    if (!src) return;
+  const handlePickFile = async (side: 'front' | 'back', file: File) => {
     cropSlotRef.current = side;
-    setCropSrc(src);
-    setCropOpen(true);
+    if (side === 'front') frontFileRef.current = file;
+    else backFileRef.current = file;
+    setOcrError(null);
+    await processFile(file);
   };
 
-  const handleCaptureAndCrop = (side: 'front' | 'back', dataUrl: string) => {
-    if (side === 'front') setFrontImage(dataUrl);
-    else setBackImage(dataUrl);
-    // Auto-open crop editor immediately after upload
+  const openCropFor = async (side: 'front' | 'back') => {
+    const file = side === 'front' ? frontFileRef.current : backFileRef.current;
+    if (!file) return;
     cropSlotRef.current = side;
-    setCropSrc(dataUrl);
-    setCropOpen(true);
+    await processFile(file);
   };
 
-  // Called when user confirms a crop + side selection
+  // Auto-open the crop editor as soon as processFile finishes preprocessing.
+  useEffect(() => {
+    if (state.status === 'crop_pending') {
+      setCropOpen(true);
+    }
+  }, [state.status]);
+
   const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
-    if (side === 'front') setFrontBlob(blob);
-    if (side === 'back') setBackBlob(blob);
+    const previewUrl = URL.createObjectURL(blob);
+    if (side === 'front') {
+      setFrontBlob(blob);
+      setFrontImage(previewUrl);
+    } else {
+      setBackBlob(blob);
+      setBackImage(previewUrl);
+    }
     setCropOpen(false);
   };
 
   const handleCropRedo = () => {
     setCropOpen(false);
+    resetProcessor();
   };
 
   const handleExtract = async () => {
@@ -183,7 +196,8 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
     setBackBlob(null);
     setNote('');
     setCropOpen(false);
-    setCropSrc('');
+    frontFileRef.current = null;
+    backFileRef.current = null;
     setOcrError(null);
     setMissingFields([]);
     resetProcessor();
@@ -208,14 +222,14 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
               <CardSlot
                 side="Front"
                 image={frontImage}
-                onCapture={dataUrl => handleCaptureAndCrop('front', dataUrl)}
+                onPickFile={file => handlePickFile('front', file)}
                 onCropClick={() => openCropFor('front')}
                 primary
               />
               <CardSlot
                 side="Back"
                 image={backImage}
-                onCapture={dataUrl => handleCaptureAndCrop('back', dataUrl)}
+                onPickFile={file => handlePickFile('back', file)}
                 onCropClick={() => openCropFor('back')}
               />
             </div>
@@ -256,7 +270,7 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
             <Button variant="outline" onClick={onClose} disabled={extracting}>Cancel</Button>
             <Button
               onClick={handleExtract}
-              disabled={!frontImage || extracting}
+              disabled={!frontBlob || extracting}
               className="gap-1.5"
             >
               <Sparkles className="w-4 h-4" />
@@ -268,9 +282,10 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
 
       {/* CardCropEditor — opens on top of ScanCardForm after image is selected */}
       <CardCropEditor
-        imageSrc={cropSrc}
         isOpen={cropOpen}
-        onConfirm={handleCropConfirm}
+        imageSrc={state.status === 'crop_pending' ? state.imageUrl : ''}
+        initialBounds={state.status === 'crop_pending' ? state.detectedBounds : undefined}
+        onConfirm={(blob) => handleCropConfirm(blob, cropSlotRef.current)}
         onRedo={handleCropRedo}
       />
     </>

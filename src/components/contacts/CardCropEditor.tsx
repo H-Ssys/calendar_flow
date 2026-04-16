@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Check, ImageIcon, RotateCcw } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
+import { Cropper, CropperRef } from 'react-advanced-cropper';
+import type { CropperState } from 'advanced-cropper';
+import 'react-advanced-cropper/dist/style.css';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -16,6 +19,8 @@ export interface CardCropEditorProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CardCropEditor({
+  imageSrc,
+  initialBounds,
   onConfirm,
   onRedo,
   isOpen,
@@ -23,30 +28,51 @@ export function CardCropEditor({
   const [rotation, setRotation] = useState(0);
   const [step, setStep] = useState<'crop' | 'side-selection'>('crop');
   const [selectedSide, setSelectedSide] = useState<'front' | 'back' | null>(null);
+  const cropperRef = useRef<CropperRef>(null);
 
-  // Reset state whenever the dialog opens
-  React.useEffect(() => {
-    if (isOpen) {
-      setRotation(0);
-      setStep('crop');
-      setSelectedSide(null);
-    }
-  }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen) return;
+    console.log('CardCropEditor imageSrc:', imageSrc);
+    console.log('CardCropEditor initialBounds:', initialBounds);
+    setRotation(0);
+    setStep('crop');
+    setSelectedSide(null);
+  }, [isOpen, imageSrc, initialBounds]);
 
   const handleLevel = () => setRotation(0);
 
   const handleUseCrop = () => setStep('side-selection');
 
   const handleConfirmSide = () => {
-    if (selectedSide) {
-      // Placeholder Blob — real canvas extraction wired in C4
+    if (!selectedSide) return;
+    const canvas = cropperRef.current?.getCanvas();
+    if (!canvas) {
       onConfirm(new Blob(), selectedSide);
+      return;
     }
+    canvas.toBlob(
+      (blob) => {
+        onConfirm(blob ?? new Blob(), selectedSide);
+      },
+      'image/jpeg',
+      0.9,
+    );
   };
 
   const handleOpenChange = (open: boolean) => {
     if (!open) onRedo();
   };
+
+  // initialBounds is in percent (0–100). Convert to absolute pixel coords of the
+  // source image so react-advanced-cropper can position its stencil.
+  const defaultCoordinates = initialBounds
+    ? (state: CropperState) => ({
+        left:   (initialBounds.left   / 100) * state.imageSize.width,
+        top:    (initialBounds.top    / 100) * state.imageSize.height,
+        width:  (initialBounds.width  / 100) * state.imageSize.width,
+        height: (initialBounds.height / 100) * state.imageSize.height,
+      })
+    : undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -74,24 +100,25 @@ export function CardCropEditor({
         {/* ── Scrollable editor body ─────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center justify-start">
 
-          {/* Placeholder image area — replaced by <Cropper> in C4 */}
+          {/* Crop area */}
           <div className="w-full flex-1 flex items-center justify-center p-6 min-h-[260px] sm:min-h-[340px]">
             <div
-              className={[
-                'w-full max-w-[640px]',
-                'aspect-[1.75/1]',
-                'rounded-lg',
-                'bg-neutral-200 dark:bg-neutral-800',
-                'border-2 border-dashed border-neutral-400 dark:border-neutral-600',
-                'flex flex-col items-center justify-center gap-3',
-                'text-neutral-500 dark:text-neutral-400',
-                'select-none',
-                'transition-transform duration-200',
-              ].join(' ')}
-              style={{ transform: `rotate(${rotation}deg)` }}
+              className="w-full max-w-[640px] aspect-[1.75/1] rounded-lg overflow-hidden bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700"
+              style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 200ms' }}
             >
-              <ImageIcon size={40} strokeWidth={1.5} />
-              <span className="text-sm font-medium tracking-wide">Card preview</span>
+              {imageSrc ? (
+                <Cropper
+                  ref={cropperRef}
+                  src={imageSrc}
+                  defaultCoordinates={defaultCoordinates}
+                  stencilProps={{ aspectRatio: 1.75 / 1, grid: true }}
+                  className="w-full h-full"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-sm text-neutral-500">
+                  No image
+                </div>
+              )}
             </div>
           </div>
 
