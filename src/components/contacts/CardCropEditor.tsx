@@ -70,12 +70,19 @@ export function CardCropEditor({
   const handleAutoCrop = async () => {
     if (!imageSrc || !cropperRef.current) return;
     const bounds = await detectCardBoundsFromUrl(imageSrc);
-    cropperRef.current.setCoordinates((state) => ({
-      left:   (bounds.left   / 100) * state.imageSize.width,
-      top:    (bounds.top    / 100) * state.imageSize.height,
-      width:  (bounds.width  / 100) * state.imageSize.width,
-      height: (bounds.height / 100) * state.imageSize.height,
-    }));
+    console.log('Auto crop bounds:', bounds);
+
+    setTimeout(() => {
+      cropperRef.current?.setCoordinates(({ imageSize, visibleArea }) => {
+        const area = visibleArea || imageSize;
+        return {
+          left:   (bounds.left   / 100) * area.width  + (area.left || 0),
+          top:    (bounds.top    / 100) * area.height + (area.top  || 0),
+          width:  (bounds.width  / 100) * area.width,
+          height: (bounds.height / 100) * area.height,
+        };
+      });
+    }, 50);
   };
 
   const handleUseCrop = () => {
