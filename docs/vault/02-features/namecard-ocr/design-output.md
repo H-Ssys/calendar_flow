@@ -276,3 +276,161 @@ All interactive elements include `dark:` variants:
 - Placeholder: `dark:border-neutral-700 / 800`, `dark:bg-neutral-900 / 950`
 - Hover: `dark:hover:border-indigo-500`, `dark:hover:bg-indigo-950/30`
 - Labels: `dark:bg-neutral-800`, `dark:text-neutral-400`
+
+---
+
+## D2 — SocialPlatforms
+
+### Component
+
+| Field | Value |
+|-------|-------|
+| **Name** | `SocialPlatforms` |
+| **Path** | `src/components/contacts/SocialPlatforms.tsx` |
+| **Constants** | `src/constants/socialPlatforms.ts` |
+| **Status** | Complete — read-only + edit modes |
+| **Lines** | ~240 (component) + ~60 (constants) |
+
+---
+
+### Props Interface
+
+```typescript
+interface SocialEntry {
+  platform: string;
+  value: string;
+  label: string;
+}
+
+interface SocialPlatformsProps {
+  socials: SocialEntry[];
+  onChange: (socials: SocialEntry[]) => void;
+  readOnly?: boolean;
+}
+```
+
+---
+
+### Layout
+
+#### Read-only mode (`readOnly=true`)
+```
+┌─────────────────────────────────────────┐
+│ [Li] LinkedIn   @john-doe  →link        │
+│ [Tw] Twitter    @johndoe   →link        │
+│ [Ig] Instagram  j.doe      →link        │
+└─────────────────────────────────────────┘
+```
+- Colored 2-letter badge + platform name (fixed 80px) + handle (linked if URL-mappable)
+- Empty state: italic "No social platforms added"
+
+#### Edit mode (`readOnly=false`)
+```
+┌─────────────────────────────────────────┐
+│ [Li] LinkedIn   [handle input]   [×]    │
+│ [Tw] Twitter    [handle input]   [×]    │
+│ [+ Add platform]                        │
+│   ┌────── Popover ──────┐               │
+│   │ [Li] [Tw] [Ig] ...  │               │
+│   │ ─────────────────── │               │
+│   │ custom name input…  │               │
+│   └─────────────────────┘               │
+└─────────────────────────────────────────┘
+```
+- Click handle → inline `<input>`, blur/Enter commits
+- Remove button (×) appears on row hover
+- Popover shows un-added platforms as colored pills
+- Custom platform text input at bottom with Enter to add
+
+---
+
+### Platform Badge System
+
+| Platform | Short | Background | Text |
+|----------|-------|-----------|------|
+| LinkedIn | Li | `#E6F1FB` | `#185FA5` |
+| Twitter | Tw | `#E6F1FB` | `#185FA5` |
+| Instagram | Ig | `#FAECE7` | `#993C1D` |
+| Facebook | Fb | `#E6F1FB` | `#185FA5` |
+| WhatsApp | Wa | `#E1F5EE` | `#0F6E56` |
+| Telegram | Tg | `#E6F1FB` | `#185FA5` |
+| GitHub | Gh | `#F1EFE8` | `#5F5E5A` |
+| YouTube | Yt | `#FCEBEB` | `#A32D2D` |
+| TikTok | Tk | `#F1EFE8` | `#444441` |
+| Discord | Dc | `#EEEDFE` | `#534AB7` |
+| Slack | Sl | `#FAECE7` | `#993C1D` |
+| WeChat | Wc | `#E1F5EE` | `#0F6E56` |
+| LINE | Ln | `#E1F5EE` | `#0F6E56` |
+| Zalo | Za | `#E6F1FB` | `#185FA5` |
+| KakaoTalk | Kt | `#FAEEDA` | `#854F0B` |
+| Skype | Sk | `#E6F1FB` | `#185FA5` |
+| custom | (first 2 chars) | `#F1EFE8` | `#5F5E5A` |
+
+Badge: `h-7 w-7 rounded-md text-[11px] font-bold` — inline styles for colors.
+
+---
+
+### shadcn/ui Components Used
+
+| Component | Usage |
+|-----------|-------|
+| `Popover` | Platform picker dropdown |
+| `PopoverContent` | Picker panel (`w-72`) |
+| `PopoverTrigger` | Wraps "Add platform" button |
+| `Button` | "Add platform" ghost button |
+
+### Icons (lucide-react)
+
+| Icon | Usage |
+|------|-------|
+| `Plus` | Add platform button |
+| `X` | Remove platform button |
+
+---
+
+### Internal Sub-components
+
+| Name | Purpose |
+|------|---------|
+| `PlatformBadge` | Colored 2-letter icon badge |
+| `EditableHandle` | Click-to-edit inline input for handle values |
+
+---
+
+### URL Mapping (read-only mode)
+
+Handles are automatically linked for known platforms:
+
+| Platform | URL prefix |
+|----------|-----------|
+| linkedin | `https://linkedin.com/in/` |
+| twitter | `https://x.com/` |
+| instagram | `https://instagram.com/` |
+| facebook | `https://facebook.com/` |
+| github | `https://github.com/` |
+| youtube | `https://youtube.com/@` |
+| tiktok | `https://tiktok.com/@` |
+| telegram | `https://t.me/` |
+
+Values starting with `http://` or `https://` are used as-is. Other platforms show plain text.
+
+---
+
+### Unique IDs (for testing)
+
+| ID | Element |
+|----|---------|
+| `social-platforms-empty` | Empty state paragraph |
+| `social-add-btn` | "Add platform" button |
+
+---
+
+### Dark Mode
+
+- Row hover: `dark:hover:bg-neutral-900/60`
+- Platform name: `dark:text-neutral-300`
+- Inline input: `dark:border-neutral-700`, `dark:bg-neutral-900`
+- Input focus: `dark:focus:border-indigo-500`
+- Editable handle hover: `dark:hover:bg-neutral-800`
+- Custom input: same dark tokens
+- Popover divider: `dark:border-neutral-700`
