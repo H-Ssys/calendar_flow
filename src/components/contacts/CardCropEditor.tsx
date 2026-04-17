@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Sparkles } from 'lucide-react';
+import { RotateCcw, Sparkles, ZoomIn, ZoomOut } from 'lucide-react';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
 import type { CropperState } from 'advanced-cropper';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,7 @@ export function CardCropEditor({
   isOpen,
 }: CardCropEditorProps) {
   const [rotation, setRotation] = useState(0);
+  const [displayRotation, setDisplayRotation] = useState(0);
   const [showAutoCropBanner, setShowAutoCropBanner] = useState(false);
   const cropperRef = useRef<CropperRef>(null);
 
@@ -37,6 +38,7 @@ export function CardCropEditor({
     console.log('CardCropEditor imageSrc:', imageSrc);
     console.log('CardCropEditor initialBounds:', initialBounds);
     setRotation(0);
+    setDisplayRotation(0);
   }, [isOpen, imageSrc, initialBounds]);
 
   // Flash "Card edge detected" banner for 1.5s whenever the editor opens with bounds.
@@ -49,7 +51,23 @@ export function CardCropEditor({
     setShowAutoCropBanner(false);
   }, [isOpen, initialBounds]);
 
-  const handleLevel = () => setRotation(0);
+  const handleLevel = () => {
+    setRotation(0);
+    setDisplayRotation(0);
+  };
+
+  const handleRotationChange = (next: number) => {
+    setRotation(next);
+    setDisplayRotation(next);
+  };
+
+  const handleZoomIn = () => {
+    cropperRef.current?.zoomImage(1.2);
+  };
+
+  const handleZoomOut = () => {
+    cropperRef.current?.zoomImage(0.8);
+  };
 
   const handleUseCrop = () => {
     const canvas = cropperRef.current?.getCanvas();
@@ -97,7 +115,7 @@ export function CardCropEditor({
       >
         <DialogTitle className="sr-only">Crop Namecard Image ({sideLabel})</DialogTitle>
         <DialogDescription className="sr-only">
-          Adjust the crop area and rotation for the {sideLabel.toLowerCase()} of the namecard.
+          Adjust the crop area, rotation, and zoom for the {sideLabel.toLowerCase()} of the namecard.
         </DialogDescription>
 
         <div className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center justify-start">
@@ -125,18 +143,21 @@ export function CardCropEditor({
             </div>
           </div>
 
-          {/* Crop area */}
-          <div className="w-full flex-1 flex items-center justify-center px-6 pb-6 pt-2 min-h-[260px] sm:min-h-[340px]">
-            <div
-              className="w-full max-w-[640px] aspect-[1.75/1] rounded-lg overflow-hidden bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700"
-              style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 200ms' }}
-            >
+          {/* Crop area — image stays still; stencil rotates via stencilProps.rotation */}
+          <div className="w-full flex-1 flex items-center justify-center px-6 pb-2 pt-2 min-h-[260px] sm:min-h-[340px]">
+            <div className="w-full max-w-[640px] aspect-[1.75/1] rounded-lg overflow-hidden bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700">
               {imageSrc ? (
                 <Cropper
                   ref={cropperRef}
                   src={imageSrc}
+                  transitions={true}
                   defaultCoordinates={defaultCoordinates}
-                  stencilProps={{ aspectRatio: 1.75 / 1, grid: true }}
+                  stencilProps={{
+                    aspectRatio: { minimum: 1.4, maximum: 2.2 },
+                    rotation: rotation,
+                    grid: true,
+                  } as any}
+                  zoom={{ wheel: { ratio: 0.1 } } as any}
                   className="w-full h-full"
                 />
               ) : (
@@ -147,8 +168,30 @@ export function CardCropEditor({
             </div>
           </div>
 
+          {/* Zoom controls */}
+          <div className="flex items-center justify-center gap-3 py-2">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              title="Zoom out 20%"
+            >
+              <ZoomOut size={14} />
+              Zoom out −
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              title="Zoom in 20%"
+            >
+              <ZoomIn size={14} />
+              Zoom in +
+            </button>
+          </div>
+
           {/* Rotation control */}
-          <div className="w-full max-w-sm mx-auto mb-6 px-4">
+          <div className="w-full max-w-sm mx-auto mb-6 mt-2 px-4">
             <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <label
@@ -159,7 +202,7 @@ export function CardCropEditor({
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-mono text-neutral-500 dark:text-neutral-400 w-10 text-right tabular-nums">
-                    {rotation}°
+                    {displayRotation}°
                   </span>
                   <Button
                     id="rotation-level-btn"
@@ -181,7 +224,7 @@ export function CardCropEditor({
                 max={45}
                 step={1}
                 value={rotation}
-                onChange={(e) => setRotation(Number(e.target.value))}
+                onChange={(e) => handleRotationChange(Number(e.target.value))}
                 className="w-full h-2 cursor-pointer accent-indigo-600 block"
               />
             </div>
