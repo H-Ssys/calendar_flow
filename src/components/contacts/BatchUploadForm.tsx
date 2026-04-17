@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useContactContext } from '@/context/ContactContext';
-import { BatchCard, OcrResult } from '@/types/contact';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Plus, Sparkles, Trash2, Minimize2, ScanBarcode, Check } from 'lucide-react';
-import { cn, uuid } from '@/lib/utils';
+import { Sparkles, ScanBarcode, Check } from 'lucide-react';
+import { uuid } from '@/lib/utils';
 import { useCardProcessor, preprocessImage } from '@/hooks/useCardProcessor';
 import { CardCropEditor } from '@/components/contacts/CardCropEditor';
+import { BatchCardList } from '@/components/contacts/BatchCardList';
+import {
+  CardStatus,
+  ExtractedData,
+  ProcessedCard,
+} from '@/components/contacts/BatchCardItem';
 import { toast } from 'sonner';
 
 interface BatchUploadFormProps {
@@ -17,92 +21,7 @@ interface BatchUploadFormProps {
   maxCards?: number;
 }
 
-type CardStatus = 'waiting' | 'processing' | 'done' | 'partial' | 'failed' | 'confirmed';
-
-interface ExtractedData {
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  title: string;
-  front_ocr: OcrResult | null;
-  back_ocr: OcrResult | null;
-  alt_language: string | null;
-}
-
-interface ProcessedCard extends BatchCard {
-  frontFile?: File;
-  backFile?: File;
-  frontBlob?: Blob | null;
-  backBlob?: Blob | null;
-  status?: CardStatus;
-  extracted?: ExtractedData;
-  missingFields?: string[];
-  error?: string;
-}
-
 const AUTO_CONFIRM_SECONDS = 5;
-
-const MiniDropZone: React.FC<{
-  label: string;
-  image?: string;
-  onPickFile: (file: File) => void;
-}> = ({ label, image, onPickFile }) => {
-  const ref = useRef<HTMLInputElement>(null);
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onPickFile(file);
-    e.target.value = '';
-  };
-  return (
-    <div className="space-y-1">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</div>
-      <button
-        onClick={() => ref.current?.click()}
-        className={cn(
-          "w-full aspect-[3.5/2] rounded-md border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer transition-colors overflow-hidden",
-          image ? "border-solid p-0" : "hover:bg-primary/5 hover:border-primary/30"
-        )}
-      >
-        {image ? (
-          <img src={image} alt={label} className="w-full h-full object-cover" />
-        ) : (
-          <>
-            <Upload className="w-5 h-5 text-muted-foreground/30 mb-1" />
-            <span className="text-[10px] text-muted-foreground">Upload</span>
-          </>
-        )}
-      </button>
-      <input ref={ref} type="file" accept="image/*,.heic" className="hidden" onChange={handleFile} />
-    </div>
-  );
-};
-
-const StatusDot: React.FC<{ status: CardStatus | undefined }> = ({ status }) => {
-  const styles: Record<CardStatus, string> = {
-    waiting: 'bg-neutral-400',
-    processing: 'bg-blue-500 animate-pulse',
-    done: 'bg-green-500',
-    partial: 'bg-amber-500',
-    failed: 'bg-red-500',
-    confirmed: 'bg-green-600',
-  };
-  const cls = status ? styles[status] : 'bg-neutral-300';
-  return <span className={cn('inline-block w-2 h-2 rounded-full', cls)} />;
-};
-
-const statusLabel = (card: ProcessedCard): string => {
-  switch (card.status) {
-    case 'processing': return 'Processing…';
-    case 'done':       return `${card.extracted?.name || 'Unnamed'}${card.extracted?.company ? ' · ' + card.extracted.company : ''}`;
-    case 'partial':    return `${card.extracted?.name || 'Unnamed'} · missing: ${(card.missingFields || []).join(', ')}`;
-    case 'failed':     return "Couldn't read — enter manually";
-    case 'confirmed':  return `${card.extracted?.name || 'Unnamed'} · saved`;
-    case 'waiting':    return 'Waiting';
-    default:           return card.frontFile || card.frontImage ? 'Ready' : '';
-  }
-};
 
 export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose, maxCards = 20 }) => {
   const { addContact } = useContactContext();
@@ -148,6 +67,8 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
     if (cards.length >= maxCards) return;
     setCards(prev => [...prev, { id: uuid() }]);
   };
+
+  const updateNote = (id: string, note: string) => updateCard(id, { note });
 
   // ── Per-card crop flow ────────────────────────────────────────────────────
   const handlePickFile = async (cardId: string, side: 'front' | 'back', file: File) => {
@@ -481,90 +402,20 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
           </DialogHeader>
 
           <div className="px-6 py-4 max-h-[55vh] overflow-y-auto space-y-3">
-            {cards.map((card, i) => (
-              <div key={card.id} className="p-3 rounded-lg border border-border bg-muted/10">
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                    <span>Card #{i + 1}</span>
-                    <StatusDot status={card.status} />
-                    <span className="normal-case tracking-normal text-[11px] text-foreground/80">
-                      {statusLabel(card)}
-                    </span>
-                    {countdowns[i] !== undefined && countdowns[i] > 0 && (
-                      <button
-                        onClick={() => cancelCountdown(i)}
-                        className="normal-case tracking-normal text-[11px] text-primary hover:underline"
-                      >
-                        Auto-save in {countdowns[i]}s · Cancel
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => removeCard(card.id)}
-                    className="p-0.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-[1fr_1fr_180px] gap-3 items-start">
-                  <MiniDropZone
-                    label="FRONT"
-                    image={card.frontImage}
-                    onPickFile={file => handlePickFile(card.id, 'front', file)}
-                  />
-                  <MiniDropZone
-                    label="BACK"
-                    image={card.backImage}
-                    onPickFile={file => handlePickFile(card.id, 'back', file)}
-                  />
-                  <div className="space-y-1">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">NOTE</div>
-                    <Textarea
-                      value={card.note || ''}
-                      onChange={e => updateCard(card.id, { note: e.target.value })}
-                      placeholder="Context, meeting place..."
-                      className="resize-none text-xs border-dashed min-h-[88px]"
-                    />
-                  </div>
-                </div>
-                {card.error && (
-                  <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
-                    {card.error}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {cards.length < maxCards && (
-              <button
-                onClick={addCard}
-                className="w-full h-10 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Add more business card ({cards.length}/{maxCards})
-              </button>
-            )}
-
-            {extracting && (
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-                  <span className="text-sm text-primary font-medium">Extracting contacts... {extractedCount}/{validCards.length}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all duration-500"
-                    style={{ width: `${validCards.length > 0 ? (extractedCount / validCards.length) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {saveSuccessMsg && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-                {saveSuccessMsg} — add more cards or close.
-              </div>
-            )}
+            <BatchCardList
+              cards={cards}
+              countdowns={countdowns}
+              validCount={validCards.length}
+              extractedCount={extractedCount}
+              extracting={extracting}
+              saveSuccessMsg={saveSuccessMsg}
+              maxCards={maxCards}
+              onAddCard={addCard}
+              onPickFile={handlePickFile}
+              onUpdateNote={updateNote}
+              onRemove={removeCard}
+              onCancelCountdown={cancelCountdown}
+            />
           </div>
 
           <DialogFooter className="px-6 py-4 border-t border-border">
