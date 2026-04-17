@@ -2,129 +2,156 @@
 type: module-scan
 module: contacts
 created: 2026-04-14
-scan_purpose: pre-namecard-ocr baseline
+updated: 2026-04-17
+scan_purpose: delta scan after Antigravity UI session
 ---
 
 # Contacts Module Scan
 
-Pre-OCR baseline of the contacts module before wiring the FastAPI
-namecard / OCR pipeline into `ScanCardForm` and `BatchUploadForm`.
+Updated after Antigravity session (commits `866046b` → `eca120d`). Five source files
+changed: `CardCropEditor.tsx`, `ScanCardForm.tsx`, `BatchUploadForm.tsx`,
+`NewContactForm.tsx`, `useCardProcessor.ts`, and `types/contact.ts`.
 
 ## Files
 
 ### `src/types/contact.ts`
-- **Size:** 1.2 KB · 48 lines
-- **Purpose:** Defines `Contact` and `BatchCard` shapes plus helpers (`getInitials`, `CONTACT_COLORS`).
-- **Exports:** `Contact` (interface), `BatchCard` (interface), `getInitials` (fn), `CONTACT_COLORS` (const array).
+- **Size:** ~2.4 KB · 110 lines
+- **Purpose:** Defines `OcrResult`, `Contact`, `BatchCard`, `CropBounds`, `CardProcessorState`, and helpers.
+- **Exports:** `OcrResult`, `SocialEntry`, `PhoneEntry`, `CropBounds`, `CardProcessorState` (type), `Contact`, `BatchCard` (interfaces); `getInitials` (fn), `CONTACT_COLORS` (const array).
 - **Imports:** none.
-- **Patterns:** Pure TypeScript module, no runtime deps. Optional fields throughout (most non-id fields are `?`).
+- **Changes since baseline:**
+  - `OcrResult` gained `alt_name`, `alt_title`, `alt_company`, `alt_address` fields — supports dual-language card extraction from back-side OCR.
+  - `Contact` gained `altFirstName`, `altLastName`, `altCompany`, `altJobTitle`, `altAddress` — mirrors the new `OcrResult` alt-fields for dual-language storage.
+  - `CropBounds` and `CardProcessorState` are new additions (previously lived in the hook; now centralised here).
 - **Issues:**
-  - No `userId`/`user_id` field — model assumes single-user, will need extension once wired to Supabase `public.contacts` (which has `user_id UUID NOT NULL`).
-  - `frontCardImage` / `backCardImage` typed as `string` (data-URL today, must become Storage URL after OCR wiring).
-  - No discriminator for OCR-extracted vs hand-entered records — needed for confidence/audit trail in OCR pipeline.
+  - Still no `userId`/`user_id` field — schema mismatch with `public.contacts` persists.
+  - `frontCardImage` / `backCardImage` still typed as `string` (data URL / blob URL).
 
 ### `src/context/ContactContext.tsx`
-- **Size:** 2.9 KB · 102 lines
+- **Size:** 2.9 KB · 102 lines *(unchanged)*
 - **Purpose:** React Context provider holding contacts in component state with CRUD helpers.
-- **Exports:** `useContactContext` (hook), `ContactProvider` (component).
-- **Imports:** `react`, `@/types/contact`.
-- **Patterns:** Context+Provider, `useState` for in-memory store, `crypto.randomUUID()` for IDs.
-- **Issues:**
-  - **In-memory only.** Hard-codes `MOCK_CONTACTS` (3 entries) as initial state — no Supabase wiring, no persistence at all.
-  - No `localStorage` usage either, so contacts are lost on every reload (worse than the v1 task/note contexts).
-  - No `loading` / `error` / `userId` state — provider has no concept of auth.
-  - Will need full rewrite to a `useContacts` hook backed by `supabase-client` (mirrors P3 plan in [[codebase-scan]]).
+- **Exports:** `useContactContext`, `ContactProvider`.
+- **Issues:** In-memory MOCK_CONTACTS only; no Supabase wiring; no auth.
 
-### `src/components/contacts/ContactDetail.tsx`
-- **Size:** 23.9 KB · 435 lines
-- **Purpose:** Right-pane contact view with inline-editable fields, color picker, edit modal, delete dialog, tag editor, and linked events/tasks/notes panels.
-- **Exports:** `ContactDetail`.
-- **Imports:** `react`, `@/types/contact`, `@/context/ContactContext`, `@/components/ui/textarea`, `@/components/ui/badge`, `@/components/ui/alert-dialog`, `lucide-react`, `date-fns`, `@/lib/utils`.
-- **Patterns:** Inline-editable `Field` subcomponent, modal portal via fixed-position div, `AlertDialog` for destructive action, optimistic updates straight to context.
+### `src/hooks/useCardProcessor.ts`
+- **Size:** ~15 KB · 462 lines
+- **Purpose:** Image preprocessing, card-edge detection, and OCR state machine for single (`mode:'new'`) and batch (`mode:'batch'`) flows.
+- **Exports:**
+  - `preprocessImage(file: File): Promise<Blob>` — resize + JPEG compress
+  - `detectCardBoundsFromUrl(url: string): Promise<CropBounds>` — loads image, runs edge detection
+  - `UseCardProcessorOptions` (interface), `UseCardProcessorReturn` (interface)
+  - `useCardProcessor(opts): UseCardProcessorReturn` — main hook
+- **Changes since baseline:**
+  - `detectCardBounds` (old, OffscreenCanvas path) replaced with `scanEdges()` — a full separable-box-blur + row/col gradient projection algorithm for improved edge detection on hand-held cards and flat-surface shots. Handles texture noise (wood grain, fabric) that caused the old approach to miss card edges.
+  - `detectCardBoundsFromUrl` now drives both the auto-crop button in `CardCropEditor` and the batch preprocessing path.
+  - Hook now exposes `pendingOcr` boolean — used by `NewContactForm` and `BatchUploadForm` to show loading states.
 - **Issues:**
-  - **Largest file in the module (435 lines).** Under the 500-line threshold but close — three internal subcomponents (`Field`, `EditContactModal`, `ContactDetail`) could split into separate files.
-  - Linked events/tasks/notes render raw IDs as text (placeholder UI) — no joins to other contexts.
-  - Two parallel edit affordances (inline `Field` + `EditContactModal`) duplicate state-binding logic; OCR rewrite is a good time to consolidate.
+  - `console.log('Auto crop bounds:', bounds)` left in `CardCropEditor.handleAutoCrop` — debug noise.
+  - Large file (462 lines); `scanEdges` (~90 lines) could extract to a utility if it grows further.
+
+### `src/components/contacts/CardCropEditor.tsx`
+- **Size:** 266 lines
+- **Purpose:** Crop dialog (react-advanced-cropper) with auto-detect, zoom, and confirm actions.
+- **Exports:** `CardCropEditorProps` (interface), `CardCropEditor`.
+- **Changes since baseline:**
+  - Added `handleAutoCrop` — calls `detectCardBoundsFromUrl` and applies result via `cropperRef.setCoordinates`.
+  - Added **Auto crop to edges** toolbar button (`Wand2` icon).
+  - Toolbar layout changed from centered row to `justify-between` (auto-crop left, zoom controls right).
+  - Removed `stencilProps.aspectRatio` constraint — allows free-form crop for non-standard card sizes.
+  - `setCoordinates` now runs inside `setTimeout(50)` to ensure the cropper is fully mounted before applying bounds.
+- **Issues:** None new; `console.log` in `handleAutoCrop` is debug noise to clean up.
 
 ### `src/components/contacts/NewContactForm.tsx`
-- **Size:** 9.1 KB · 203 lines
-- **Purpose:** Modal dialog to create a new contact manually, with optional front/back card images and a color picker.
+- **Size:** 473 lines
+- **Purpose:** Modal dialog to manually create a contact, with optional OCR prefill from front + back card images.
 - **Exports:** `NewContactForm`.
-- **Imports:** `react`, `@/context/ContactContext`, `@/types/contact`, `@/components/ui/{input,textarea,button,dialog}`, `lucide-react`, `@/lib/utils`.
-- **Patterns:** Controlled inputs with one `useState` per field (15 hooks), `FileReader` -> data URL for image upload, `prefill` prop for OCR hand-off.
+- **Changes since baseline:**
+  - **+6 `useState` hooks** — `altFirstName`, `altLastName`, `altCompany`, `altJobTitle`, `altAddress`, `showAlt`, `showAddBack`, `successMessage`.
+  - Back-side crop now fires `confirmCrop(blob, 'back')` immediately on `handleCropConfirm` (no second consent prompt).
+  - `handleAutoFill` now only calls `confirmCrop(frontBlob, 'front')` — back OCR is handled in the crop-confirm path.
+  - `handleAddBack` / `handleSkipBack` helpers added for the "add back side" optional flow.
+  - `pendingOcr` from `useCardProcessor` consumed (ready for loading state UI).
+  - `showOcrConsent` now set inside crop-confirm (front side) rather than at upload time.
+  - Shows `successMessage` state (wired but toast UI pending).
 - **Issues:**
-  - 15 separate `useState` calls — should collapse into a single form-state object or `react-hook-form` before adding more fields.
-  - Image upload stores base64 data URLs in component state (and ultimately in the contact record). Will not scale; needs Supabase Storage upload as part of OCR work.
-  - `prefill` API exists but no caller passes it yet — this is the intended seam for OCR results.
+  - Now **21 separate `useState` calls** — the form-state consolidation issue from baseline has gotten worse. Should migrate to `useReducer` or `react-hook-form` before the next feature increment.
+  - `showAddBack` toggle added but no UI renders for it yet (dead state variable).
 
 ### `src/components/contacts/ScanCardForm.tsx`
-- **Size:** 5.7 KB · 162 lines
-- **Purpose:** Single-card scan dialog. Uploads front + optional back, calls a stubbed extractor, then either hands data to `onExtracted` or directly creates a contact.
+- **Size:** 394 lines
+- **Purpose:** Single-card scan dialog: upload front + optional back, crop, OCR, then hand off to `NewContactForm` or direct-add.
 - **Exports:** `ScanCardForm`.
-- **Imports:** `react`, `@/context/ContactContext`, `@/types/contact`, `@/components/ui/{button,textarea,dialog}`, `lucide-react`, `@/lib/utils`.
-- **Patterns:** `CardSlot` reusable subcomponent, `FileReader` -> data URL, simulated async extraction (`setTimeout(1800)`).
+- **Changes since baseline:**
+  - `UploadStep` type added: `'idle' | 'front_crop' | 'back_crop' | 'done'` — replaces ad-hoc boolean flags for step tracking.
+  - `CardSlot` gains `disabled` prop — upload buttons are locked during active crop/OCR steps.
+  - Imports `OcrResult` from `@/types/contact`.
+  - `pendingOcr` from `useCardProcessor` consumed.
+  - `Check` icon imported (ready for confirmation UI).
 - **Issues:**
-  - **`handleExtract` is mocked** — returns hard-coded `mockExtracted` payload. This is the primary integration point for the namecard OCR pipeline (`flow-api` `/ocr` + `/detect-card`).
-  - `as any` cast on `addContact({ ...mockExtracted as any, ... })` — type safety hole that should be removed when the real extractor lands.
-  - No error handling for upload failures or OCR failures (no try/catch, no user-facing error state).
+  - Mock OCR (`handleExtract` returning hard-coded data) **status unknown** — diff truncated at line 80; verify whether real `flow-api` calls are wired in current file.
 
 ### `src/components/contacts/BatchUploadForm.tsx`
-- **Size:** 8.0 KB · 195 lines
-- **Purpose:** Multi-card (up to 20) batch upload dialog with progress bar; sequentially "extracts" each card and creates contacts.
+- **Size:** 511 lines  ⚠️ **OVER 500 LINES**
+- **Purpose:** Multi-card (up to 20) batch upload dialog with per-card crop → OCR → confirm → save flow.
 - **Exports:** `BatchUploadForm`.
-- **Imports:** `react`, `@/context/ContactContext`, `@/types/contact`, `@/components/ui/{button,textarea,badge,dialog}`, `lucide-react`, `@/lib/utils`.
-- **Patterns:** `MiniDropZone` reusable subcomponent, simulated per-card extraction (`setTimeout(800)`), progress badge + bar.
+- **Changes since baseline:**
+  - `saveSuccessMsg` state added — shows inline success banner ("N contacts saved — add more or close") instead of closing the dialog on save.
+  - `pendingOcr` from `useCardProcessor` consumed.
+  - `handleSaveAll` no longer calls `onClose()` — it drops saved cards from the list and resets to fresh empty slots, keeping the dialog open for continuous batch entry.
+  - `savedIds` set used to filter out saved cards while preserving failed/unconfirmed ones.
+  - `countdowns` and `processingIndexRef` reset after save.
 - **Issues:**
-  - **Extraction is fake** — creates contacts named `Contact 1`, `Contact 2`, … with no real OCR. Same primary integration point as ScanCardForm.
-  - Sequential `await` loop blocks the dialog; a real OCR pipeline should batch-submit and stream results (Celery + Redis is already provisioned).
-  - No retry / partial-failure UI (e.g., card 7 fails -> what happens?).
+  - **511 lines — exceeds 500-line threshold.** Candidate for split into `BatchUploadForm` (orchestration) + `BatchCardList` (card list rendering).
+  - `as any` cast on `addContact(...)` still present.
+  - Sequential OCR loop still blocks; Celery/Redis pipeline not yet wired.
+
+### `src/components/contacts/ContactDetail.tsx`
+- **Size:** 435 lines *(unchanged)*
+- **Purpose:** Right-pane contact view — inline-editable fields, color picker, edit modal, delete dialog, tag editor, linked events/tasks/notes panels.
+- **Exports:** `ContactDetail`.
+- **Issues:** Unchanged from baseline; approaching 500-line threshold.
 
 ## Migrations (latest two)
 
-### `supabase/migrations/011_note_metadata.sql`
-- **Size:** 0.5 KB · 10 lines
-- **Purpose:** Adds `metadata JSONB` to `public.notes` for v1-only fields (category, isFavorite, linkedDate, linked*Ids).
-- **Touches contacts?** No — but the comment notes that cross-module links could later move into `contact_notes`.
-
-### `supabase/migrations/012_journal_focus_metadata.sql`
-- **Size:** 0.6 KB · 15 lines
-- **Purpose:** Adds `metadata JSONB` to `public.journal_entries` and `public.focus_sessions`.
-- **Touches contacts?** No.
-
-> **Note:** Neither of the two latest migrations touches the contacts schema. The canonical `public.contacts` table is defined in `001_core_tables.sql` (lines 21-59) — RLS enabled there, indexed in `007_indexes.sql`, policy in `006_rls_policies.sql`. `004_ai_storage.sql` defines `contact_embeddings` (pgvector + HNSW). No migration yet adds OCR-specific columns (e.g., `ocr_confidence`, `ocr_source_asset_id`, `ocr_raw_text`) — that is a deliverable of the namecard-OCR work.
+No new contact-related migrations since baseline scan. OCR columns (`ocr_confidence`,
+`ocr_source_asset_id`, `ocr_raw_text`) still not added.
 
 ## Patterns Used (module-wide)
 
 - Context+Provider for state (no persistence layer).
 - `crypto.randomUUID()` for client-side IDs.
-- `FileReader` -> base64 data URL for image previews.
+- `FileReader` → base64 / blob URL for image previews.
+- `react-advanced-cropper` for crop UI.
 - `lucide-react` icons + shadcn/ui dialog primitives.
 - Inline Tailwind utility classes (no module CSS).
 - `prefill: Partial<Contact>` as the OCR hand-off contract on `NewContactForm`.
+- `useCardProcessor` as unified image processing + OCR state machine.
 
 ## Issues Roll-up
 
 | Severity | Item | File |
 |----------|------|------|
-| HIGH | Mock OCR extractor returns hard-coded fields | ScanCardForm.tsx:81-89 |
-| HIGH | Mock batch extractor names contacts `Contact N` | BatchUploadForm.tsx:80-95 |
-| HIGH | Context has no Supabase wiring; in-memory MOCK_CONTACTS | ContactContext.tsx:4-72 |
-| HIGH | Contact images stored as base64 data URLs (will bloat Supabase rows) | NewContactForm/ScanCardForm/BatchUploadForm |
-| MED  | `as any` cast bypasses Contact typing | ScanCardForm.tsx:96 |
-| MED  | ContactDetail.tsx 435 lines (approaching 500-line threshold) | ContactDetail.tsx |
+| HIGH | BatchUploadForm exceeds 500-line limit (511 lines) | BatchUploadForm.tsx |
+| HIGH | Mock OCR extractor status unclear — verify ScanCardForm wiring | ScanCardForm.tsx |
+| HIGH | Context has no Supabase wiring; in-memory MOCK_CONTACTS | ContactContext.tsx |
+| HIGH | Contact images stored as base64/blob URLs (not Supabase Storage) | NewContactForm / ScanCardForm / BatchUploadForm |
+| MED  | NewContactForm has 21 separate `useState` calls (was 15) | NewContactForm.tsx |
+| MED  | `as any` cast bypasses Contact typing | BatchUploadForm.tsx, ScanCardForm.tsx |
+| MED  | `showAddBack` state variable has no rendering UI (dead code) | NewContactForm.tsx |
 | MED  | No `user_id` on `Contact` type — schema mismatch with `public.contacts` | types/contact.ts |
-| LOW  | NewContactForm has 15 separate `useState` hooks | NewContactForm.tsx:57-72 |
-| LOW  | Linked events/tasks rendered as raw IDs (placeholder) | ContactDetail.tsx:312-342 |
+| MED  | ContactDetail.tsx 435 lines (approaching threshold) | ContactDetail.tsx |
+| LOW  | `console.log('Auto crop bounds:', bounds)` debug noise | CardCropEditor.tsx |
+| LOW  | OCR columns (`ocr_*`) not yet in Supabase schema | supabase migrations |
+| LOW  | Linked events/tasks rendered as raw IDs (placeholder) | ContactDetail.tsx |
 
-No `localStorage` usage detected in any contacts file (the module skipped v1 persistence entirely — it has *no* persistence).
+## Post-Antigravity Recommendations
 
-## Pre-OCR Recommendations
-
-1. Wire `ContactContext` (or a new `useContacts` hook) to `supabase-client` before adding OCR — otherwise OCR results vanish on reload.
-2. Add a contacts migration introducing `ocr_*` columns + a `contact_assets` link to `public.assets` for original card images.
-3. Replace base64 data URLs with Supabase Storage uploads in all three card-handling forms.
-4. Replace stubs in `ScanCardForm.handleExtract` and `BatchUploadForm.handleExtractAll` with calls to `flow-api` `/detect-card` + `/ocr`.
-5. Drop the `as any` cast in ScanCardForm once the OCR response is properly typed.
+1. **Split `BatchUploadForm.tsx`** — extract `BatchCardList` (card list + individual card row rendering) to bring both files under 400 lines.
+2. **Verify `ScanCardForm.handleExtract`** — confirm whether real `flow-api` calls are wired or mock still active.
+3. **Remove `showAddBack` dead state** from `NewContactForm` or wire it to a UI element.
+4. **Collapse `NewContactForm` state** — 21 `useState` → single `useReducer` or `react-hook-form` before next feature.
+5. **Remove `console.log`** in `CardCropEditor.handleAutoCrop`.
+6. **Wire `ContactContext`** to Supabase before OCR results start being generated (otherwise they vanish on reload).
 
 ## Related
 
