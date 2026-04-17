@@ -4,9 +4,9 @@ import { useContactContext } from '@/context/ContactContext';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  X, Trash2, Phone, Mail, Linkedin, Globe, MapPin, Building2,
-  Calendar, CheckSquare, FileText, Heart, Tag, Pencil, Check,
-  Image, CalendarPlus, ListTodo, Languages
+  X, Trash2, Phone, MapPin, Building2,
+  Calendar, FileText, Heart, Tag, Pencil, Check,
+  Languages, Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { ContactCardImages } from '@/components/contacts/ContactCardImages';
+import { SocialPlatforms } from '@/components/contacts/SocialPlatforms';
+import { ContactReferences } from '@/components/contacts/ContactReferences';
+import { ContactFlow } from '@/components/contacts/ContactFlow';
+import { getLanguageDisplayName } from '@/constants/languageDisplayNames';
 
 interface ContactDetailProps {
   contact: Contact;
@@ -168,10 +173,14 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ contact, onSave, on
 
 /* ── Main component ─────────────────────────────────────────────────── */
 export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }) => {
-  const { updateContact, deleteContact, toggleStar } = useContactContext();
+  const {
+    updateContact, deleteContact, toggleStar,
+    addContactReference, removeContactReference,
+  } = useContactContext();
   const [tagInput, setTagInput] = useState('');
   const [showEdit, setShowEdit] = useState(false);
   const [showAlt, setShowAlt] = useState(false);
+  const [activeLang, setActiveLang] = useState<'front' | 'back'>('front');
 
   const hasAlt = !!(contact.altFirstName || contact.altLastName || contact.altCompany || contact.altJobTitle || contact.altAddress);
   const altDisplayName = [contact.altFirstName, contact.altLastName].filter(Boolean).join(' ') || null;
@@ -187,6 +196,21 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
   };
 
   const initials = getInitials(contact);
+
+  // ── Language tab + OCR-derived display ────────────────────────────────
+  const frontLang = contact.front_ocr?.language ?? 'en';
+  const backLang = contact.alt_language;
+  const showLanguageTabs = !!(contact.back_ocr && backLang);
+  const displayOcr = activeLang === 'back' && contact.back_ocr
+    ? contact.back_ocr
+    : contact.front_ocr;
+
+  // ── Flow + references wiring ──────────────────────────────────────────
+  const contactReferences: [] = [];
+  const navigateToContact = (_id: string) => { /* wired in D5 */ };
+  const handleAddEvent = () => { /* wired in D5 */ };
+  const handleAddTask = () => { /* wired in D5 */ };
+  const handleAddNote = () => { /* wired in D5 */ };
 
   return (
     <>
@@ -285,85 +309,61 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
         {/* ── Scrollable body ───────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
 
-          {/* Business card images — compact height */}
-          <div className="grid grid-cols-2 gap-0 border-b border-border">
-            {(['front', 'back'] as const).map(side => {
-              const src = side === 'front' ? contact.frontCardImage : contact.backCardImage;
-              return (
-                <div key={side}
+          {/* Business card images */}
+          <div className="px-4 py-3 border-b border-border">
+            <ContactCardImages
+              frontUrl={contact.front_image_url ?? contact.frontCardImage ?? undefined}
+              backUrl={contact.back_image_url ?? contact.backCardImage ?? undefined}
+              onUploadFront={() => { /* wire to scan flow in D5 */ }}
+              onUploadBack={() => { /* wire to scan flow in D5 */ }}
+              contactName={contact.displayName ?? ''}
+            />
+          </div>
+
+          {/* Language tab bar + OCR-derived display — only when back_ocr + alt_language */}
+          {showLanguageTabs && backLang && (
+            <div className="px-4 py-3 border-b border-border bg-primary/[0.02]">
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setActiveLang('front')}
                   className={cn(
-                    "h-28 bg-muted/20 flex items-center justify-center overflow-hidden",
-                    side === 'front' && "border-r border-border"
+                    'text-xs px-3 py-1 rounded-full border transition-colors',
+                    activeLang === 'front'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border text-muted-foreground'
                   )}
                 >
-                  {src ? (
-                    <img src={src} alt={`${side} card`} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center gap-1 text-muted-foreground/25">
-                      <Image className="w-6 h-6" />
-                      <span className="text-[9px] capitalize">{side} side</span>
+                  {getLanguageDisplayName(frontLang)}
+                </button>
+                <button
+                  onClick={() => setActiveLang('back')}
+                  className={cn(
+                    'text-xs px-3 py-1 rounded-full border transition-colors',
+                    activeLang === 'back'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border text-muted-foreground'
+                  )}
+                >
+                  {getLanguageDisplayName(backLang)}
+                </button>
+              </div>
+              {displayOcr && (
+                <div className="space-y-0.5">
+                  {displayOcr.name && (
+                    <div className="text-sm font-semibold text-foreground truncate">{displayOcr.name}</div>
+                  )}
+                  {(displayOcr.title || displayOcr.company) && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      {[displayOcr.title, displayOcr.company].filter(Boolean).join(' · ')}
                     </div>
                   )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Stats row — compact */}
-          <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
-            {[
-              { icon: Calendar, label: 'Events', count: contact.linkedEventIds?.length || 0 },
-              { icon: CheckSquare, label: 'Tasks', count: contact.linkedTaskIds?.length || 0 },
-              { icon: FileText, label: 'Notes', count: contact.linkedNoteIds?.length || 0 },
-            ].map(({ icon: Icon, label, count }) => (
-              <div key={label} className="flex flex-col items-center py-2 hover:bg-muted/30 cursor-pointer transition-colors">
-                <span className="text-base font-bold text-foreground">{count}</span>
-                <span className="text-[10px] text-muted-foreground">{label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick action buttons — compact */}
-          <div className="grid grid-cols-2 gap-2 px-4 py-2 border-b border-border">
-            <button className="flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors">
-              <CalendarPlus className="w-3.5 h-3.5" /> Add Event
-            </button>
-            <button className="flex items-center justify-center gap-1.5 h-8 rounded-lg border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors">
-              <ListTodo className="w-3.5 h-3.5" /> Add Task
-            </button>
-          </div>
-
-          {/* Linked Events + Tasks — side by side */}
-          <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
-            <div className="px-4 py-3">
-              <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2 flex items-center gap-1">
-                <Calendar className="w-3 h-3" /> Events
-              </h4>
-              {(!contact.linkedEventIds?.length) ? (
-                <p className="text-[11px] text-muted-foreground/40 italic">No events yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {contact.linkedEventIds.map(id => (
-                    <div key={id} className="text-xs text-foreground bg-muted/30 px-2 py-1 rounded">{id}</div>
-                  ))}
+                  {displayOcr.address && (
+                    <div className="text-xs text-muted-foreground/80 truncate">{displayOcr.address}</div>
+                  )}
                 </div>
               )}
             </div>
-            <div className="px-4 py-3">
-              <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2 flex items-center gap-1">
-                <CheckSquare className="w-3 h-3" /> Tasks
-              </h4>
-              {(!contact.linkedTaskIds?.length) ? (
-                <p className="text-[11px] text-muted-foreground/40 italic">No tasks yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {contact.linkedTaskIds.map(id => (
-                    <div key={id} className="text-xs text-foreground bg-muted/30 px-2 py-1 rounded">{id}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* Info sections — 2 col grid */}
           <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
@@ -375,6 +375,14 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
               <Field label="Email" value={contact.email} placeholder="Add email" type="email" onSave={v => update({ email: v })} />
               <Field label="LinkedIn" value={contact.linkedIn} placeholder="linkedin.com/in/..." onSave={v => update({ linkedIn: v })} />
               <Field label="Website" value={contact.website} placeholder="https://..." onSave={v => update({ website: v })} />
+              <div className="pt-1">
+                <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Social Platforms</div>
+                <SocialPlatforms
+                  socials={contact.socials ?? []}
+                  onChange={(socials) => update({ socials })}
+                  readOnly={false}
+                />
+              </div>
             </div>
             <div className="px-4 py-3 space-y-2.5">
               <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1">
@@ -483,6 +491,33 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
                 />
               </div>
             </div>
+          </div>
+
+          {/* References */}
+          <div className="px-4 py-3 border-b border-border space-y-2">
+            <h4 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1">
+              <Users className="w-3 h-3" /> References
+            </h4>
+            <ContactReferences
+              contactId={contact.id}
+              references={contactReferences}
+              onAdd={(refId, label) => addContactReference(contact.id, refId, label)}
+              onRemove={(refId) => removeContactReference(contact.id, refId)}
+              onContactClick={(id) => navigateToContact(id)}
+            />
+          </div>
+
+          {/* Flow — Events, Tasks, Notes */}
+          <div className="px-4 py-3 border-b border-border">
+            <ContactFlow
+              contactId={contact.id}
+              linkedEventIds={contact.linkedEventIds ?? []}
+              linkedTaskIds={contact.linkedTaskIds ?? []}
+              linkedNoteIds={contact.linkedNoteIds ?? []}
+              onAddEvent={() => handleAddEvent()}
+              onAddTask={() => handleAddTask()}
+              onAddNote={() => handleAddNote()}
+            />
           </div>
 
           {/* Footer */}
