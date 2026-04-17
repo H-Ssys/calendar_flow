@@ -4,10 +4,9 @@ import { PageHeaderRight } from '@/components/PageHeaderRight';
 import { ContactProvider, useContactContext } from '@/context/ContactContext';
 import { ContactDetail } from '@/components/contacts/ContactDetail';
 import { NewContactForm } from '@/components/contacts/NewContactForm';
-import { ScanCardForm } from '@/components/contacts/ScanCardForm';
 import { BatchUploadForm } from '@/components/contacts/BatchUploadForm';
 import { Contact, getInitials } from '@/types/contact';
-import { Users, Plus, Search, Heart, X, Upload, ChevronDown, ScanBarcode } from 'lucide-react';
+import { Users, Plus, Search, Heart, X, ChevronDown, ScanBarcode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -24,8 +23,7 @@ const ContactsInner: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterStarred, setFilterStarred] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
-  const [showScanCard, setShowScanCard] = useState(false);
-  const [showBatchUpload, setShowBatchUpload] = useState(false);
+  const [showScanUpload, setShowScanUpload] = useState(false);
 
   const selectedContact = selectedId ? contacts.find(c => c.id === selectedId) ?? null : null;
 
@@ -89,11 +87,8 @@ const ContactsInner: React.FC = () => {
                     <Plus className="w-4 h-4" /> New Contact
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setShowScanCard(true)} className="gap-2">
-                    <ScanBarcode className="w-4 h-4" /> Scan Card
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowBatchUpload(true)} className="gap-2">
-                    <Upload className="w-4 h-4" /> Batch Upload
+                  <DropdownMenuItem onClick={() => setShowScanUpload(true)} className="gap-2">
+                    <ScanBarcode className="w-4 h-4" /> Scan & Upload Card
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -218,11 +213,8 @@ const ContactsInner: React.FC = () => {
                   <Button onClick={() => setShowNewContact(true)} size="sm" className="gap-1.5">
                     <Plus className="w-4 h-4" /> New Contact
                   </Button>
-                  <Button onClick={() => setShowScanCard(true)} variant="outline" size="sm" className="gap-1.5">
-                    <ScanBarcode className="w-4 h-4" /> Scan Card
-                  </Button>
-                  <Button onClick={() => setShowBatchUpload(true)} variant="outline" size="sm" className="gap-1.5">
-                    <Upload className="w-4 h-4" /> Batch Upload
+                  <Button onClick={() => setShowScanUpload(true)} variant="outline" size="sm" className="gap-1.5">
+                    <ScanBarcode className="w-4 h-4" /> Scan & Upload Card
                   </Button>
                 </div>
               </div>
@@ -233,8 +225,7 @@ const ContactsInner: React.FC = () => {
 
       {/* Modals */}
       <NewContactForm open={showNewContact} onClose={() => setShowNewContact(false)} />
-      <ScanCardForm open={showScanCard} onClose={() => setShowScanCard(false)} />
-      <BatchUploadForm open={showBatchUpload} onClose={() => setShowBatchUpload(false)} />
+      <BatchUploadForm open={showScanUpload} onClose={() => setShowScanUpload(false)} />
     </div>
   );
 };

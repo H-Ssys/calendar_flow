@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   X, Trash2, Phone, Mail, Linkedin, Globe, MapPin, Building2,
   Calendar, CheckSquare, FileText, Heart, Tag, Pencil, Check,
-  Image, CalendarPlus, ListTodo
+  Image, CalendarPlus, ListTodo, Languages
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -171,6 +171,10 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
   const { updateContact, deleteContact, toggleStar } = useContactContext();
   const [tagInput, setTagInput] = useState('');
   const [showEdit, setShowEdit] = useState(false);
+  const [showAlt, setShowAlt] = useState(false);
+
+  const hasAlt = !!(contact.altFirstName || contact.altLastName || contact.altCompany || contact.altJobTitle || contact.altAddress);
+  const altDisplayName = [contact.altFirstName, contact.altLastName].filter(Boolean).join(' ') || null;
 
   const update = (data: Partial<Contact>) => updateContact(contact.id, data);
   const handleDelete = () => { deleteContact(contact.id); onClose(); };
@@ -208,16 +212,36 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
               </div>
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-foreground leading-tight truncate">{contact.displayName}</h2>
-              {(contact.jobTitle || contact.company) && (
+              <h2 className="text-sm font-bold text-foreground leading-tight truncate">
+                {showAlt && altDisplayName ? altDisplayName : contact.displayName}
+              </h2>
+              {showAlt && altDisplayName && contact.displayName && (
+                <p className="text-[10px] text-muted-foreground/60 truncate">{contact.displayName}</p>
+              )}
+              {(showAlt ? (contact.altJobTitle || contact.altCompany) : (contact.jobTitle || contact.company)) && (
                 <p className="text-xs text-muted-foreground truncate">
-                  {[contact.jobTitle, contact.company].filter(Boolean).join(' · ')}
+                  {showAlt
+                    ? [contact.altJobTitle || contact.jobTitle, contact.altCompany || contact.company].filter(Boolean).join(' · ')
+                    : [contact.jobTitle, contact.company].filter(Boolean).join(' · ')}
                 </p>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Alt language toggle */}
+            <button
+              onClick={() => setShowAlt(!showAlt)}
+              className={cn(
+                "p-1.5 rounded-md transition-colors",
+                showAlt
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-primary"
+              )}
+              title={showAlt ? 'Show primary language' : 'Show alternative language'}
+            >
+              <Languages className="w-4 h-4" />
+            </button>
             {/* Heart (favourite) */}
             <button
               onClick={() => toggleStar(contact.id)}
@@ -362,6 +386,53 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
               <Field label="Industry" value={contact.industry} placeholder="Industry" onSave={v => update({ industry: v })} />
             </div>
           </div>
+
+          {/* Alt language section — shown when toggle is active */}
+          {showAlt && (
+            <div className="px-4 py-3 border-b border-border bg-primary/[0.02]">
+              <h4 className="text-[10px] uppercase tracking-wider font-semibold text-primary/70 flex items-center gap-1 mb-2">
+                <Languages className="w-3 h-3" /> Alternative Language {contact.alt_language ? `(${contact.alt_language})` : ''}
+              </h4>
+              {hasAlt ? (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {contact.altFirstName && (
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">First Name</div>
+                      <div className="text-sm font-medium">{contact.altFirstName}</div>
+                    </div>
+                  )}
+                  {contact.altLastName && (
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Last Name</div>
+                      <div className="text-sm font-medium">{contact.altLastName}</div>
+                    </div>
+                  )}
+                  {contact.altCompany && (
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Company</div>
+                      <div className="text-sm font-medium">{contact.altCompany}</div>
+                    </div>
+                  )}
+                  {contact.altJobTitle && (
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Job Title</div>
+                      <div className="text-sm font-medium">{contact.altJobTitle}</div>
+                    </div>
+                  )}
+                  {contact.altAddress && (
+                    <div className="space-y-0.5 col-span-2">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Address</div>
+                      <div className="text-sm font-medium">{contact.altAddress}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/50 italic">
+                  No alternative language data yet. Scan a dual-language business card to populate.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
             <div className="px-4 py-3 space-y-2.5">

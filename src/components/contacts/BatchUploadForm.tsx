@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Upload, Plus, Sparkles, Trash2, Minimize2, ScanBarcode, Check } from 'lucide-react';
 import { cn, uuid } from '@/lib/utils';
 import { useCardProcessor, preprocessImage } from '@/hooks/useCardProcessor';
 import { CardCropEditor } from '@/components/contacts/CardCropEditor';
+import { toast } from 'sonner';
 
 interface BatchUploadFormProps {
   open: boolean;
@@ -108,11 +109,11 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
 
   const [cards, setCards] = useState<ProcessedCard[]>([
     { id: uuid() },
-    { id: uuid() },
   ]);
   const [extracting, setExtracting] = useState(false);
   const [countdowns, setCountdowns] = useState<Record<number, number>>({});
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
 
   const { state, pendingOcr, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'batch' });
   const processingIndexRef = useRef<number>(-1);
@@ -313,6 +314,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
       (c.frontFile || c.frontImage) ? { ...c, status: 'waiting' } : c,
     ));
     processingIndexRef.current = 0;
+    setMinimized(true); // Minimize to bubble immediately
     await processNextCard();
   };
 
@@ -350,7 +352,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
     // Drop saved cards, keep failed + unconfirmed. Top up with a fresh empty slot.
     setCards(prev => {
       const remaining = prev.filter(c => !savedIds.has(c.id));
-      return remaining.length > 0 ? remaining : [{ id: uuid() }, { id: uuid() }];
+      return remaining.length > 0 ? remaining : [{ id: uuid() }];
     });
     setCountdowns({});
     processingIndexRef.current = -1;
@@ -358,9 +360,10 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   };
 
   const reset = () => {
-    setCards([{ id: uuid() }, { id: uuid() }]);
+    setCards([{ id: uuid() }]);
     setCountdowns({});
     setExtracting(false);
+    setMinimized(false);
     processingIndexRef.current = -1;
     flowRef.current = 'crop';
     cropTargetRef.current = null;
@@ -368,21 +371,108 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
     resetProcessor();
   };
 
+  // ── Auto-save when minimized and extraction finishes ──────────────────────
+  const didAutoSaveRef = useRef(false);
+  useEffect(() => {
+    if (!minimized || extracting) {
+      didAutoSaveRef.current = false;
+      return;
+    }
+    if (didAutoSaveRef.current) return;
+    if (saveableCards.length === 0) return;
+
+    // All extraction is done — auto-save the results
+    didAutoSaveRef.current = true;
+    const names = saveableCards.map(c => c.extracted?.name || 'Contact').slice(0, 3);
+    const count = saveableCards.length;
+
+    saveableCards.forEach(card => {
+      addContact({
+        displayName: card.extracted?.name?.trim() || 'New Contact',
+        company: card.extracted?.company || undefined,
+        jobTitle: card.extracted?.title || undefined,
+        phone: card.extracted?.phone || undefined,
+        email: card.extracted?.email || undefined,
+        frontCardImage: card.frontImage,
+        backCardImage: card.backImage,
+        note: card.note,
+        front_ocr: card.extracted?.front_ocr ?? null,
+        back_ocr: card.extracted?.back_ocr ?? null,
+        alt_language: card.extracted?.alt_language ?? null,
+        tags: [],
+        starred: false,
+        linkedEventIds: [],
+        linkedTaskIds: [],
+        linkedNoteIds: [],
+      } as any);
+    });
+
+    const nameList = names.join(', ') + (count > 3 ? ` +${count - 3} more` : '');
+    toast.success(`${count} contact${count === 1 ? '' : 's'} saved!`, {
+      description: nameList,
+      duration: 5000,
+    });
+
+    setTimeout(() => {
+      reset();
+      onClose();
+    }, 2000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minimized, extracting, saveableCards.length]);
+
   const extractionStarted = processingIndexRef.current >= 0;
   const showSave = !extracting && saveableCards.length > 0;
 
   return (
     <>
-      <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
+      {/* ── Floating OCR bubble (when minimized) ─────────────────────────── */}
+      {minimized && (
+        <div
+          className="fixed bottom-24 right-6 z-[59] cursor-pointer"
+          onClick={() => setMinimized(false)}
+        >
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg border border-border/50 bg-background/95 backdrop-blur-md hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+            {extracting ? (
+              <>
+                <div className="relative">
+                  <ScanBarcode className="w-5 h-5 text-primary" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-foreground">
+                    Extracting {extractedCount}/{validCards.length}
+                  </span>
+                  <div className="w-24 h-1 bg-muted rounded-full mt-1 overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{ width: `${validCards.length > 0 ? (extractedCount / validCards.length) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                  <Check className="w-3.5 h-3.5 text-green-600" />
+                </div>
+                <span className="text-sm font-medium text-green-700">
+                  {saveableCards.length} contact{saveableCards.length !== 1 ? 's' : ''} saved!
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <Dialog open={open && !minimized} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
         <DialogContent className="max-w-3xl p-0 gap-0">
           <DialogHeader className="px-6 py-4 border-b border-border">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-primary" />
-                  Batch Upload Business Cards
+                  <ScanBarcode className="w-5 h-5 text-primary" />
+                  Scan & Upload Cards
                 </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Upload up to {maxCards} cards at once</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Upload or scan up to {maxCards} cards at once</p>
               </div>
               <Badge variant="secondary" className="text-sm px-3 py-1">
                 {extractedCount} / {validCards.length} extracted
@@ -451,7 +541,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
                 className="w-full h-10 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Add more cards ({cards.length}/{maxCards})
+                Add more business card ({cards.length}/{maxCards})
               </button>
             )}
 
