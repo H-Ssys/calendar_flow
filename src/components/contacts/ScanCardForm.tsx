@@ -285,7 +285,8 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
         isOpen={cropOpen}
         imageSrc={state.status === 'crop_pending' ? state.imageUrl : ''}
         initialBounds={state.status === 'crop_pending' ? state.detectedBounds : undefined}
-        onConfirm={(blob) => handleCropConfirm(blob, cropSlotRef.current)}
+        currentSide={cropSlotRef.current}
+        onConfirm={(blob, side) => handleCropConfirm(blob, side)}
         onRedo={handleCropRedo}
       />
     </>

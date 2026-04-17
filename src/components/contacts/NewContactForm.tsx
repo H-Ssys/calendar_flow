@@ -322,7 +322,8 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
         isOpen={showCropEditor}
         imageSrc={state.status === 'crop_pending' ? state.imageUrl : ''}
         initialBounds={state.status === 'crop_pending' ? state.detectedBounds : undefined}
-        onConfirm={(blob) => handleCropConfirm(blob, currentSide)}
+        currentSide={currentSide}
+        onConfirm={(blob, side) => handleCropConfirm(blob, side)}
         onRedo={() => {
           setShowCropEditor(false);
           resetProcessor();
