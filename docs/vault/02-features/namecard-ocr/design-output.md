@@ -434,3 +434,257 @@ Values starting with `http://` or `https://` are used as-is. Other platforms sho
 - Editable handle hover: `dark:hover:bg-neutral-800`
 - Custom input: same dark tokens
 - Popover divider: `dark:border-neutral-700`
+
+---
+
+## D3 — ContactReferences
+
+### Component
+
+| Field | Value |
+|-------|-------|
+| **Name** | `ContactReferences` |
+| **Path** | `src/components/contacts/ContactReferences.tsx` |
+| **Status** | Complete — placeholder search data, real wiring in D4 |
+| **Lines** | ~240 |
+
+---
+
+### Props Interface
+
+```typescript
+interface ReferenceEntry {
+  refId: string;
+  name: string;
+  company?: string;
+  avatarColor?: string;
+  label?: string;
+}
+
+interface ContactReferencesProps {
+  contactId: string;
+  references: ReferenceEntry[];
+  onAdd: (refId: string, label?: string) => void;
+  onRemove: (refId: string) => void;
+  onContactClick: (id: string) => void;
+}
+```
+
+---
+
+### Layout
+
+```
+┌─────────────────────────────────────────────┐
+│  flex-wrap row of chips:                    │
+│  ┌──┬─────────┬───────────┐                 │
+│  │SC│ Sarah C. │ Works with│  [×]            │
+│  └──┴─────────┴───────────┘                 │
+│  ┌──┬─────────┐                             │
+│  │ML│ Marcus L│                [×]           │
+│  └──┴─────────┘                             │
+│  [+ Add reference]                          │
+│    ┌─────── Popover ──────────┐             │
+│    │ [Existing] [New contact] │  ← tabs     │
+│    │ ┌─ Search ─────────────┐ │             │
+│    │ │ 🔍 name or company…  │ │             │
+│    │ ├──────────────────────┤ │             │
+│    │ │ (SC) Sarah Chen      │ │             │
+│    │ │ (ML) Marcus Lee      │ │             │
+│    │ └──────────────────────┘ │             │
+│    └──────────────────────────┘             │
+└─────────────────────────────────────────────┘
+```
+
+### States
+
+#### Chips
+- Circular avatar (`h-6 w-6`, initials, colored background) + name (truncated at 120px) + optional label badge
+- Click avatar or name → `onContactClick(refId)`
+- Hover chip → × button appears at top-right corner (`opacity-0 → opacity-100`)
+- Empty state: italic "No references yet"
+
+#### Label badges
+Colored by relationship type:
+
+| Label | Background | Text |
+|-------|-----------|------|
+| Referred by | `#E6F1FB` | `#185FA5` |
+| Works with | `#E1F5EE` | `#0F6E56` |
+| Reports to | `#FAEEDA` | `#854F0B` |
+| Introduced me to | `#EEEDFE` | `#534AB7` |
+| custom / other | `#F1EFE8` | `#5F5E5A` |
+
+#### Add Popover (tabbed)
+- **Tab 1 "Existing contacts"**: Search input with magnifier icon → filtered scrollable list (max-h 160px). Already-added and self are excluded.
+- **Tab 2 "New contact"**: Name (required) + Email (optional) inputs + "Add & link" button. Creates temp ID for now.
+
+---
+
+### shadcn/ui Components Used
+
+| Component | Usage |
+|-----------|-------|
+| `Popover` | Add reference dropdown |
+| `PopoverContent` | `w-80`, no padding (tabs handle it) |
+| `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent` | Existing vs New tabs |
+| `Input` | Search + Name + Email fields |
+| `Button` | "Add reference" ghost, "Add & link" primary |
+
+### Icons (lucide-react)
+
+| Icon | Usage |
+|------|-------|
+| `Plus` | Add reference button |
+| `Search` | Search input prefix |
+| `X` | Remove chip button |
+
+---
+
+### Unique IDs
+
+| ID | Element |
+|----|---------|
+| `contact-refs-empty` | Empty state paragraph |
+| `contact-refs-add-btn` | "Add reference" button |
+
+---
+
+### D4 Wiring Notes
+
+- Replace `PLACEHOLDER_CONTACTS` with real contact list from context/hook
+- Wire "New contact" tab to actual contact creation API
+- Add label editing dropdown on each chip (options already defined in `LABEL_OPTIONS`)
+
+---
+
+## D3 — ContactFlow
+
+### Component
+
+| Field | Value |
+|-------|-------|
+| **Name** | `ContactFlow` |
+| **Path** | `src/components/contacts/ContactFlow.tsx` |
+| **Status** | Complete — placeholder list items, real wiring in D4 |
+| **Lines** | ~220 |
+
+---
+
+### Props Interface
+
+```typescript
+interface ContactFlowProps {
+  contactId: string;
+  linkedEventIds: string[];
+  linkedTaskIds: string[];
+  linkedNoteIds: string[];
+  onAddEvent: () => void;
+  onAddTask: () => void;
+  onAddNote: () => void;
+}
+```
+
+---
+
+### Layout
+
+```
+┌──────────────────────────────────────────┐
+│  Stats row:                              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │    3     │ │    5     │ │    2     │ │
+│  │  Events  │ │  Tasks   │ │  Notes   │ │
+│  └──────────┘ └──────────┘ └──────────┘ │
+│                                          │
+│  [All] [Events] [Tasks] [Notes]  [+ Add] │
+│                                          │
+│  ● Coffee meeting          Upcoming      │
+│    2026-04-15                            │
+│  ● Send proposal draft     In Progress   │
+│    2026-04-14                            │
+│  ● Meeting notes           Note          │
+│    2026-04-13                            │
+└──────────────────────────────────────────┘
+```
+
+### Stats Row
+- 3 side-by-side `StatCard` with `flex-1`, `rounded-lg`, `bg-neutral-50`
+- Count: `text-xl font-medium tabular-nums`
+- Label: `text-[11px] uppercase tracking-wide`
+
+### Tab Bar
+- Pill-style tabs (`rounded-full`), color-coded per active state:
+  - All: `bg-neutral-900 text-white` (dark: inverted)
+  - Events: `bg-blue-50 text-blue-700`
+  - Tasks: `bg-amber-50 text-amber-700`
+  - Notes: `bg-teal-50 text-teal-700`
+- Context-aware Add button right-aligned next to tabs
+
+### List Items
+Each `FlowItemRow`:
+- Colored dot (`h-2 w-2 rounded-full`) — blue/amber/teal
+- Title: `text-[13px] font-medium` + date: `text-[11px] text-neutral-400`
+- Status pill right-aligned with type-specific background
+
+### Add Button Behavior
+
+| Active Tab | Button | Action |
+|-----------|--------|--------|
+| All | `+ Add` | Opens 3-option Popover picker (Event/Task/Note) |
+| Events | `+ Add event` | Direct `onAddEvent()` |
+| Tasks | `+ Add task` | Direct `onAddTask()` |
+| Notes | `+ Add note` | Direct `onAddNote()` |
+
+### Empty States
+Per-tab italic centered text: "No events yet" / "No tasks yet" / "No notes yet" / "No activity yet"
+
+---
+
+### Type Color System
+
+| Type | Dot | Status bg | Status text |
+|------|-----|-----------|-------------|
+| Event | `bg-blue-500` | `bg-blue-50` | `text-blue-700` |
+| Task | `bg-amber-500` | `bg-amber-50` | `text-amber-700` |
+| Note | `bg-teal-500` | `bg-teal-50` | `text-teal-700` |
+
+---
+
+### shadcn/ui Components Used
+
+| Component | Usage |
+|-----------|-------|
+| `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent` | Tab navigation |
+| `Badge` | (imported, available for status pills in D4) |
+| `Button` | Context-aware add buttons |
+| `Popover` / `PopoverContent` / `PopoverTrigger` | "All" tab quick picker |
+
+### Icons (lucide-react)
+
+| Icon | Usage |
+|------|-------|
+| `CalendarDays` | Event type config |
+| `CheckCircle2` | Task type config |
+| `FileText` | Note type config |
+| `Plus` | Add buttons |
+
+---
+
+### Unique IDs
+
+| ID | Element |
+|----|---------|
+| `flow-add-event` | Add event button |
+| `flow-add-task` | Add task button |
+| `flow-add-note` | Add note button |
+| `flow-add-all` | Add picker button (All tab) |
+
+---
+
+### D4 Wiring Notes
+
+- Replace `PLACEHOLDER_ITEMS` with real data from event/task/note contexts
+- Use `linkedEventIds`, `linkedTaskIds`, `linkedNoteIds` to fetch actual items
+- Add click-to-navigate on list items
+- Wire status badges to real status values
