@@ -73,13 +73,12 @@ export function CardCropEditor({
     console.log('Auto crop bounds:', bounds);
 
     setTimeout(() => {
-      cropperRef.current?.setCoordinates(({ imageSize, visibleArea }) => {
-        const area = visibleArea || imageSize;
+      cropperRef.current?.setCoordinates(({ imageSize }) => {
         return {
-          left:   (bounds.left   / 100) * area.width  + (area.left || 0),
-          top:    (bounds.top    / 100) * area.height + (area.top  || 0),
-          width:  (bounds.width  / 100) * area.width,
-          height: (bounds.height / 100) * area.height,
+          left:   (bounds.left   / 100) * imageSize.width,
+          top:    (bounds.top    / 100) * imageSize.height,
+          width:  (bounds.width  / 100) * imageSize.width,
+          height: (bounds.height / 100) * imageSize.height,
         };
       });
     }, 50);
@@ -162,7 +161,6 @@ export function CardCropEditor({
               transitions={true}
               defaultCoordinates={defaultCoordinates}
               stencilProps={{
-                aspectRatio: { minimum: 1.4, maximum: 2.2 },
                 grid: true,
               }}
               zoom={{ wheel: { ratio: 0.1 } } as any}

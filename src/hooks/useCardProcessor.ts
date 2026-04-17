@@ -64,79 +64,101 @@ function scanEdges(
 ): CropBounds {
   const pixels = data.data;
 
-  function getBrightness(x: number, y: number): number {
-    const i = (y * width + x) * 4;
-    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  // ── 1. Build grayscale buffer ──────────────────────────────────────────────
+  const gray = new Float32Array(width * height);
+  for (let i = 0, j = 0; i < pixels.length; i += 4, j++) {
+    gray[j] = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
   }
 
-  const corners = [
-    getBrightness(2, 2),
-    getBrightness(width - 3, 2),
-    getBrightness(2, height - 3),
-    getBrightness(width - 3, height - 3),
-  ];
-  const bgBrightness = corners.reduce((a, b) => a + b, 0) / 4;
+  // ── 2. Separable 5×5 box blur to smooth texture (wood grain, fabric) ──────
+  const tmp = new Float32Array(width * height);
+  const blr = new Float32Array(width * height);
 
-  const isDarkBackground = bgBrightness < 100;
-  const threshold = isDarkBackground ? 40 : 30;
-
-  let top = 0, bottom = height - 1, left = 0, right = width - 1;
-
-  for (let y = 0; y < height * 0.4; y++) {
-    let rowDiff = 0;
-    for (let x = Math.floor(width * 0.2); x < width * 0.8; x += 5) {
-      rowDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+  // Horizontal pass (radius 2)
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      let s = 0, n = 0;
+      const x0 = Math.max(0, x - 2);
+      const x1 = Math.min(width - 1, x + 2);
+      for (let dx = x0; dx <= x1; dx++) { s += gray[row + dx]; n++; }
+      tmp[row + x] = s / n;
     }
-    rowDiff /= (width * 0.6 / 5);
-    if (rowDiff > threshold) { top = Math.max(0, y - 2); break; }
   }
 
-  for (let y = height - 1; y > height * 0.6; y--) {
-    let rowDiff = 0;
-    for (let x = Math.floor(width * 0.2); x < width * 0.8; x += 5) {
-      rowDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+  // Vertical pass (radius 2)
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      let s = 0, n = 0;
+      const y0 = Math.max(0, y - 2);
+      const y1 = Math.min(height - 1, y + 2);
+      for (let dy = y0; dy <= y1; dy++) { s += tmp[dy * width + x]; n++; }
+      blr[y * width + x] = s / n;
     }
-    rowDiff /= (width * 0.6 / 5);
-    if (rowDiff > threshold) { bottom = Math.min(height - 1, y + 2); break; }
   }
 
-  for (let x = 0; x < width * 0.4; x++) {
-    let colDiff = 0;
-    for (let y = Math.floor(height * 0.2); y < height * 0.8; y += 5) {
-      colDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+  // ── 3. Row gradient projection (finds horizontal edges → top / bottom) ────
+  // For each row, sum the absolute vertical brightness change across all pixels.
+  // Card edges produce a continuous gradient line; texture noise averages out.
+  const rowScore = new Float32Array(height);
+  for (let y = 1; y < height - 1; y++) {
+    let sum = 0;
+    for (let x = 0; x < width; x++) {
+      sum += Math.abs(blr[(y + 1) * width + x] - blr[(y - 1) * width + x]);
     }
-    colDiff /= (height * 0.6 / 5);
-    if (colDiff > threshold) { left = Math.max(0, x - 2); break; }
+    rowScore[y] = sum / width;
   }
 
-  for (let x = width - 1; x > width * 0.6; x--) {
-    let colDiff = 0;
-    for (let y = Math.floor(height * 0.2); y < height * 0.8; y += 5) {
-      colDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+  // ── 4. Column gradient projection (finds vertical edges → left / right) ───
+  const colScore = new Float32Array(width);
+  for (let x = 1; x < width - 1; x++) {
+    let sum = 0;
+    for (let y = 0; y < height; y++) {
+      sum += Math.abs(blr[y * width + x + 1] - blr[y * width + x - 1]);
     }
-    colDiff /= (height * 0.6 / 5);
-    if (colDiff > threshold) { right = Math.min(width - 1, x + 2); break; }
+    colScore[x] = sum / height;
   }
 
-  const detectedW = right - left;
-  const detectedH = bottom - top;
-  const aspectRatio = detectedW / detectedH;
+  // ── 5. Find strongest gradient peak in each half ──────────────────────────
+  // Top edge: strongest row gradient in bottom half of the image
+  let topEdge = 0, maxTop = 0;
+  for (let y = 1; y < Math.floor(height * 0.5); y++) {
+    if (rowScore[y] > maxTop) { maxTop = rowScore[y]; topEdge = y; }
+  }
 
-  const isValidRegion =
-    detectedW > width * 0.3 &&
-    detectedH > height * 0.3 &&
-    aspectRatio > 1.2 &&
-    aspectRatio < 3.0;
+  // Bottom edge: strongest row gradient in bottom half
+  let bottomEdge = height - 1, maxBot = 0;
+  for (let y = Math.floor(height * 0.5); y < height - 1; y++) {
+    if (rowScore[y] > maxBot) { maxBot = rowScore[y]; bottomEdge = y; }
+  }
 
-  if (!isValidRegion) {
+  // Left edge: strongest column gradient in left half
+  let leftEdge = 0, maxLeft = 0;
+  for (let x = 1; x < Math.floor(width * 0.5); x++) {
+    if (colScore[x] > maxLeft) { maxLeft = colScore[x]; leftEdge = x; }
+  }
+
+  // Right edge: strongest column gradient in right half
+  let rightEdge = width - 1, maxRight = 0;
+  for (let x = Math.floor(width * 0.5); x < width - 1; x++) {
+    if (colScore[x] > maxRight) { maxRight = colScore[x]; rightEdge = x; }
+  }
+
+  // ── 6. Validate detected region ───────────────────────────────────────────
+  const dw = rightEdge - leftEdge;
+  const dh = bottomEdge - topEdge;
+
+  if (dw < width * 0.15 || dh < height * 0.15) {
     return { left: 10, top: 10, width: 80, height: 80 };
   }
 
+  // Tiny inward nudge (1 px) to trim shadow / transition at the very edge
+  const nudge = 1;
   return {
-    left: (left / width) * 100,
-    top: (top / height) * 100,
-    width: (detectedW / width) * 100,
-    height: (detectedH / height) * 100,
+    left:   ((leftEdge + nudge) / width) * 100,
+    top:    ((topEdge + nudge) / height) * 100,
+    width:  ((dw - nudge * 2) / width) * 100,
+    height: ((dh - nudge * 2) / height) * 100,
   };
 }
 
@@ -219,13 +241,27 @@ async function runOCR(
   if (backBlob) form.append('back_image', backBlob, 'back.jpg');
   form.append('user_id', user?.id ?? '');
 
-  const res = await fetch('/api/contacts/ocr', {
-    method: 'POST',
-    body: form,
-    headers: { Authorization: authHeader },
-  });
-  if (!res.ok) throw new Error(`OCR failed: ${res.status}`);
-  return res.json();
+  // 90-second client-side timeout so the request doesn't hang indefinitely
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+
+  try {
+    const res = await fetch('/api/contacts/ocr', {
+      method: 'POST',
+      body: form,
+      headers: { Authorization: authHeader },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`OCR failed: ${res.status}`);
+    return res.json();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('OCR timed out after 90 seconds — please try again');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function classifyOcrResult(result: {
@@ -233,6 +269,18 @@ function classifyOcrResult(result: {
   back?: OcrResult;
 }): CardProcessorState {
   const front = result.front;
+
+  // Check if the backend returned an explicit error (timeout, API failure, etc.)
+  // The backend wraps Gemini errors as { raw_text: null, error: "..." } — surface
+  // the actual cause instead of the generic "Card unreadable" message.
+  const backendError = (front as any)?.error;
+  if (backendError) {
+    const msg =
+      backendError === 'timeout'
+        ? 'OCR timed out — the AI service was too slow. Please try again.'
+        : `OCR error: ${backendError}`;
+    return { status: 'ocr_failure', error: msg };
+  }
 
   // Truly unreadable only when we have neither a name nor any raw text.
   if (!front.name && !front.raw_text) {
@@ -265,8 +313,13 @@ export interface UseCardProcessorOptions {
 
 export interface UseCardProcessorReturn {
   state: CardProcessorState;
+  /** Number of OCR requests currently in flight (background). */
+  pendingOcr: number;
   processFile: (file: File) => Promise<void>;
-  confirmCrop: (croppedBlob: Blob, side: 'front' | 'back') => Promise<void>;
+  /** Fire-and-forget: kicks off OCR in the background, returns immediately. */
+  confirmCrop: (croppedBlob: Blob, side: 'front' | 'back') => void;
+  /** Fire-and-forget: sends front (+ optional back) in one API call. */
+  extractCard: (frontBlob: Blob, backBlob?: Blob) => void;
   processBatch: (files: File[]) => Promise<void>;
   reset: () => void;
 }
@@ -275,10 +328,12 @@ export function useCardProcessor(
   _options?: UseCardProcessorOptions,
 ): UseCardProcessorReturn {
   const [state, setState] = useState<CardProcessorState>({ status: 'idle' });
+  const [pendingOcr, setPendingOcr] = useState(0);
   const currentUrlRef = useRef<string | null>(null);
-  // Accumulates the front-side OCR between sequential confirmCrop calls so
-  // that confirmCrop(_, 'back') can emit a combined { front, back } state.
+  // Accumulates the front-side OCR between background confirmCrop calls so
+  // that whichever side finishes second can emit combined { front, back }.
   const frontOcrRef = useRef<OcrResult | null>(null);
+  const backOcrRef = useRef<OcrResult | null>(null);
 
   const revokeCurrentUrl = () => {
     if (currentUrlRef.current) {
@@ -304,35 +359,82 @@ export function useCardProcessor(
     }
   }, []);
 
+  // Fire-and-forget: kicks off OCR in the background, returns immediately
+  // so the user can continue uploading the next card without waiting.
   const confirmCrop = useCallback(
-    async (croppedBlob: Blob, side: 'front' | 'back'): Promise<void> => {
-      try {
-        revokeCurrentUrl();
-        setState({ status: 'ocr_running' });
-        // Always send the cropped blob as front_image; the API returns its OCR
-        // on the `front` key. We relabel back-side calls in the hook.
-        const response = await runOCR(croppedBlob);
-        const ocrForBlob = response.front;
+    (croppedBlob: Blob, side: 'front' | 'back'): void => {
+      revokeCurrentUrl();
+      setPendingOcr((c) => c + 1);
+      // Immediately free the UI — don't set ocr_running which blocks.
+      setState({ status: 'idle' });
 
-        if (side === 'front') {
-          frontOcrRef.current = ocrForBlob;
-          setState(classifyOcrResult({ front: ocrForBlob }));
-        } else {
-          const storedFront = frontOcrRef.current;
-          if (!storedFront) {
-            // Edge case: back arrived without a prior front — treat as front.
+      runOCR(croppedBlob)
+        .then((response) => {
+          const ocrForBlob = response.front;
+
+          if (side === 'front') {
             frontOcrRef.current = ocrForBlob;
-            setState(classifyOcrResult({ front: ocrForBlob }));
+            // If back OCR already arrived, combine both
+            const existingBack = backOcrRef.current;
+            setState(
+              classifyOcrResult({
+                front: ocrForBlob,
+                back: existingBack ?? undefined,
+              }),
+            );
           } else {
-            setState(classifyOcrResult({ front: storedFront, back: ocrForBlob }));
+            backOcrRef.current = ocrForBlob;
+            const storedFront = frontOcrRef.current;
+            if (!storedFront) {
+              // Back arrived before front — just store; front completion will
+              // pick it up and emit the combined result.
+            } else {
+              setState(
+                classifyOcrResult({ front: storedFront, back: ocrForBlob }),
+              );
+            }
           }
-        }
-      } catch (err) {
-        setState({
-          status: 'ocr_failure',
-          error: err instanceof Error ? err.message : 'OCR failed',
+        })
+        .catch((err) => {
+          setState({
+            status: 'ocr_failure',
+            error: err instanceof Error ? err.message : 'OCR request failed',
+          });
+        })
+        .finally(() => {
+          setPendingOcr((c) => c - 1);
         });
-      }
+    },
+    [],
+  );
+
+  // Single API call with both images — backend runs them in parallel.
+  const extractCard = useCallback(
+    (front: Blob, back?: Blob): void => {
+      revokeCurrentUrl();
+      setPendingOcr((c) => c + 1);
+      setState({ status: 'idle' });
+
+      runOCR(front, back)
+        .then((response) => {
+          frontOcrRef.current = response.front;
+          if (response.back) backOcrRef.current = response.back;
+          setState(
+            classifyOcrResult({
+              front: response.front,
+              back: response.back,
+            }),
+          );
+        })
+        .catch((err) => {
+          setState({
+            status: 'ocr_failure',
+            error: err instanceof Error ? err.message : 'OCR request failed',
+          });
+        })
+        .finally(() => {
+          setPendingOcr((c) => c - 1);
+        });
     },
     [],
   );
@@ -342,7 +444,7 @@ export function useCardProcessor(
       for (const file of files) {
         await processFile(file);
         const processed = await preprocessImage(file);
-        await confirmCrop(processed, 'front');
+        confirmCrop(processed, 'front');
       }
     },
     [processFile, confirmCrop],
@@ -351,8 +453,10 @@ export function useCardProcessor(
   const reset = useCallback((): void => {
     revokeCurrentUrl();
     frontOcrRef.current = null;
+    backOcrRef.current = null;
+    setPendingOcr(0);
     setState({ status: 'idle' });
   }, []);
 
-  return { state, processFile, confirmCrop, processBatch, reset };
+  return { state, pendingOcr, processFile, confirmCrop, extractCard, processBatch, reset };
 }

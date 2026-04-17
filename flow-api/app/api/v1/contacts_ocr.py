@@ -22,8 +22,11 @@ CARD_SCHEMA: dict[str, Any] = {
     "type": "OBJECT",
     "properties": {
         "full_name":       {"type": "STRING"},
+        "alt_name":        {"type": "STRING"},
         "title":           {"type": "STRING"},
+        "alt_title":       {"type": "STRING"},
         "company":         {"type": "STRING"},
+        "alt_company":     {"type": "STRING"},
         "industry":        {"type": "STRING"},
         "phone":           {"type": "STRING"},
         "other_phone":     {"type": "STRING"},
@@ -33,6 +36,7 @@ CARD_SCHEMA: dict[str, Any] = {
         "email":           {"type": "STRING"},
         "other_email":     {"type": "STRING"},
         "address":         {"type": "STRING"},
+        "alt_address":     {"type": "STRING"},
         "website":         {"type": "STRING"},
         "notes":           {"type": "STRING"},
         "meeting_context": {"type": "STRING"},
@@ -47,8 +51,11 @@ Extract ALL information from this business card image into strict JSON.
 
 Fields to extract:
 - full_name: Full name as printed on card
+- alt_name: Alternative language or secondary name if present
 - title: Job title or position
+- alt_title: Alternative language job title
 - company: Company or organization name
+- alt_company: Alternative language company name
 - industry: Infer from company name and title
 - phone: Primary phone number (mobile preferred)
 - other_phone: Second phone number if present
@@ -58,6 +65,7 @@ Fields to extract:
 - email: Primary email address
 - other_email: Additional email addresses (semicolon separated)
 - address: Full address including postal code and country
+- alt_address: Alternative language address
 - website: Website URL
 - notes: Slogans, registration numbers (MST), or extra text
 - meeting_context: Any event names or dates printed on card
@@ -105,16 +113,41 @@ async def _call_gemini(image_bytes: bytes) -> dict[str, Any]:
         },
     }
 
-    async with BATCH_SEMAPHORE:
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-        except (httpx.TimeoutException, asyncio.TimeoutError):
-            return {"raw_text": None, "error": "timeout"}
-        except httpx.HTTPError as e:
-            return {"raw_text": None, "error": f"http_error: {e}"}
+    MAX_ATTEMPTS = 3
+    RETRYABLE_CODES = {429, 500, 502, 503, 504}
+    data = None
+
+    for attempt in range(MAX_ATTEMPTS):
+        async with BATCH_SEMAPHORE:
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(url, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break  # success
+            except (httpx.TimeoutException, asyncio.TimeoutError):
+                print(f"GEMINI TIMEOUT (attempt {attempt + 1}/{MAX_ATTEMPTS})")
+                if attempt < MAX_ATTEMPTS - 1:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                return {"raw_text": None, "error": "timeout"}
+            except httpx.HTTPError as e:
+                status = getattr(e.response, "status_code", 0) if hasattr(e, "response") and e.response else 0
+                retryable = status in RETRYABLE_CODES
+                print(f"GEMINI HTTP {status} (attempt {attempt + 1}/{MAX_ATTEMPTS}, retryable={retryable})")
+                if retryable and attempt < MAX_ATTEMPTS - 1:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                error_detail = str(e)
+                if hasattr(e, "response") and e.response is not None:
+                    try:
+                        error_detail = e.response.text[:500]
+                    except Exception:
+                        pass
+                return {"raw_text": None, "error": f"http_error: {error_detail}"}
+
+    if data is None:
+        return {"raw_text": None, "error": "max_retries_exceeded"}
 
     print(f"GEMINI RAW RESPONSE: {json.dumps(data, indent=2)[:2000]}")
 

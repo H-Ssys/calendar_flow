@@ -46,6 +46,12 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
   const [linkedIn, setLinkedIn] = useState(prefill?.linkedIn || '');
   const [website, setWebsite] = useState(prefill?.website || '');
   const [address, setAddress] = useState(prefill?.address || '');
+  const [altFirstName, setAltFirstName] = useState(prefill?.altFirstName || '');
+  const [altLastName, setAltLastName] = useState(prefill?.altLastName || '');
+  const [altCompany, setAltCompany] = useState(prefill?.altCompany || '');
+  const [altJobTitle, setAltJobTitle] = useState(prefill?.altJobTitle || '');
+  const [altAddress, setAltAddress] = useState(prefill?.altAddress || '');
+  const [showAlt, setShowAlt] = useState(false);
   const [city, setCity] = useState(prefill?.city || '');
   const [country, setCountry] = useState(prefill?.country || '');
   const [frontCardImage, setFrontCardImage] = useState(prefill?.frontCardImage || '');
@@ -72,7 +78,7 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'new' });
+  const { state, pendingOcr, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'new' });
 
   const displayName = [firstName, lastName].filter(Boolean).join(' ') || 'New Contact';
 
@@ -88,7 +94,7 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
     await processFile(file);
   };
 
-  const handleCropConfirm = async (blob: Blob, side: 'front' | 'back') => {
+  const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
     setShowCropEditor(false);
     const url = URL.createObjectURL(blob);
     if (side === 'front') {
@@ -100,15 +106,15 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       setBackBlob(blob);
       setBackPreview(url);
       setBackCardImage(url);
-      // Back side cropped — run OCR on it so alt_language + back_ocr populate.
-      await confirmCrop(blob, 'back');
+      // Back side cropped — fire OCR in background.
+      confirmCrop(blob, 'back');
     }
   };
 
   const handleAutoFill = async () => {
     setShowOcrConsent(false);
     if (!frontBlob) return;
-    await confirmCrop(frontBlob, 'front');
+    confirmCrop(frontBlob, 'front');
   };
 
   const handleManualEntry = () => {
@@ -147,6 +153,23 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       if (state.front.title) setJobTitle(state.front.title);
       if (state.front.address) setAddress(state.front.address);
       if (state.front.website) setWebsite(state.front.website);
+
+      const back = state.back;
+      const altN = state.front.alt_name || back?.name || back?.alt_name;
+      const altC = state.front.alt_company || back?.company || back?.alt_company;
+      const altT = state.front.alt_title || back?.title || back?.alt_title;
+      const altA = state.front.alt_address || back?.address || back?.alt_address;
+
+      if (altN) {
+        const { first: aF, last: aL } = splitName(altN);
+        if (aF) setAltFirstName(aF);
+        if (aL) setAltLastName(aL);
+        setShowAlt(true);
+      }
+      if (altC) { setAltCompany(altC); setShowAlt(true); }
+      if (altT) { setAltJobTitle(altT); setShowAlt(true); }
+      if (altA) { setAltAddress(altA); setShowAlt(true); }
+
       setMissingFields(state.status === 'ocr_partial' ? state.missingFields : []);
       setOcrError(null);
       // Front-only result (no back yet): prompt to add a back side.
@@ -181,14 +204,19 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       displayName: displayName.trim() || 'New Contact',
       firstName: firstName.trim() || undefined,
       lastName: lastName.trim() || undefined,
+      altFirstName: altFirstName.trim() || undefined,
+      altLastName: altLastName.trim() || undefined,
       company: company.trim() || undefined,
+      altCompany: altCompany.trim() || undefined,
       jobTitle: jobTitle.trim() || undefined,
+      altJobTitle: altJobTitle.trim() || undefined,
       department: department.trim() || undefined,
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       linkedIn: linkedIn.trim() || undefined,
       website: website.trim() || undefined,
       address: address.trim() || undefined,
+      altAddress: altAddress.trim() || undefined,
       city: city.trim() || undefined,
       country: country.trim() || undefined,
       frontCardImage: frontCardImage || undefined,
@@ -214,6 +242,8 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       setFirstName(''); setLastName(''); setCompany(''); setJobTitle('');
       setDepartment(''); setPhone(''); setEmail(''); setLinkedIn('');
       setWebsite(''); setAddress(''); setCity(''); setCountry('');
+      setAltFirstName(''); setAltLastName(''); setAltCompany(''); setAltJobTitle(''); setAltAddress('');
+      setShowAlt(false);
       setNote('');
     }, 2000);
   };
@@ -281,9 +311,9 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
             onChange={e => handleImageSelect(e, 'back')}
           />
 
-          {state.status === 'ocr_running' && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm text-primary">
-              Reading card…
+          {pendingOcr > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm text-primary flex items-center gap-2">
+              <span className="animate-pulse">✦</span> Reading card in background…
             </div>
           )}
 
@@ -307,12 +337,23 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
 
           {/* Identity */}
           <section className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" /> Identity
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5" /> Identity
+              </h4>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowAlt(!showAlt)} className="h-6 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2">
+                {showAlt ? '- Hide Alt Language' : '+ Add Alt Language'}
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Input placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} />
               <Input placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} />
+              {showAlt && (
+                <>
+                  <Input placeholder="Alternative First name" value={altFirstName} onChange={e => setAltFirstName(e.target.value)} className="bg-muted/50 border-dashed" />
+                  <Input placeholder="Alternative Last name" value={altLastName} onChange={e => setAltLastName(e.target.value)} className="bg-muted/50 border-dashed" />
+                </>
+              )}
             </div>
           </section>
 
@@ -324,6 +365,12 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
             <div className="grid grid-cols-2 gap-3">
               <Input placeholder="Company name" value={company} onChange={e => setCompany(e.target.value)} />
               <Input placeholder="Job title" value={jobTitle} onChange={e => setJobTitle(e.target.value)} />
+              {showAlt && (
+                <>
+                  <Input placeholder="Alternative Company" value={altCompany} onChange={e => setAltCompany(e.target.value)} className="bg-muted/50 border-dashed" />
+                  <Input placeholder="Alternative Job title" value={altJobTitle} onChange={e => setAltJobTitle(e.target.value)} className="bg-muted/50 border-dashed" />
+                </>
+              )}
               <Input placeholder="Department" value={department} onChange={e => setDepartment(e.target.value)} className="col-span-2" />
             </div>
           </section>
@@ -348,6 +395,9 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <Input placeholder="Street address" value={address} onChange={e => setAddress(e.target.value)} className="col-span-2" />
+              {showAlt && (
+                <Input placeholder="Alternative Address" value={altAddress} onChange={e => setAltAddress(e.target.value)} className="col-span-2 bg-muted/50 border-dashed" />
+              )}
               <Input placeholder="City" value={city} onChange={e => setCity(e.target.value)} />
               <Input placeholder="Country" value={country} onChange={e => setCountry(e.target.value)} />
             </div>

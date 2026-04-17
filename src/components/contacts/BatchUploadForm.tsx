@@ -114,7 +114,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   const [countdowns, setCountdowns] = useState<Record<number, number>>({});
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'batch' });
+  const { state, pendingOcr, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'batch' });
   const processingIndexRef = useRef<number>(-1);
   const cardsRef = useRef<ProcessedCard[]>(cards);
 

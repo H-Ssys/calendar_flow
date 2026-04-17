@@ -1,11 +1,15 @@
 export interface OcrResult {
   name?: string | null;
+  alt_name?: string | null;
   title?: string | null;
+  alt_title?: string | null;
   company?: string | null;
+  alt_company?: string | null;
   email?: string | null;
   phone?: string | null;
   phone_alt?: string | null;
   address?: string | null;
+  alt_address?: string | null;
   website?: string | null;
   language?: string | null;
   raw_text: string;
@@ -45,8 +49,12 @@ export interface Contact {
   displayName: string;
   firstName?: string;
   lastName?: string;
+  altFirstName?: string;
+  altLastName?: string;
   company?: string;
+  altCompany?: string;
   jobTitle?: string;
+  altJobTitle?: string;
   department?: string;
   industry?: string;
   phone?: string;
@@ -54,6 +62,7 @@ export interface Contact {
   linkedIn?: string;
   website?: string;
   address?: string;
+  altAddress?: string;
   city?: string;
   country?: string;
   frontCardImage?: string;
