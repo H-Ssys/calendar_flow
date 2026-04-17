@@ -4,6 +4,28 @@ Tracks sync notes for changes pushed from Antigravity sessions.
 
 ---
 
+## Sync — 2026-04-17 (second session, commit 182c9b5)
+
+Changes pushed from Antigravity session:
+
+**Files changed:**
+- `src/components/contacts/BatchUploadForm.tsx` — floating OCR bubble when minimized; auto-save on extraction complete (`sonner` toast); initial slots 2→1; dialog title → "Scan & Upload Cards"; `minimized` state + auto-close after save
+- `src/components/contacts/ContactDetail.tsx` — alt-language toggle (`Languages` icon); `showAlt` state; alt-language panel (name/company/job title/address grid); header switches to alt values when active
+- `src/pages/Contacts.tsx` — `ScanCardForm` import and modals removed; "Scan Card" + "Batch Upload" merged into single "Scan & Upload Card" entry → `BatchUploadForm`
+
+**New components added:** none
+
+**Size warnings:**
+- `BatchUploadForm.tsx` — **601 lines** (was 511), +90 lines. Urgent split needed.
+- `ContactDetail.tsx` — **506 lines** (was 435), crossed 500-line threshold for first time.
+
+**New issues introduced:**
+- `alt_language` field referenced in `ContactDetail` but absent from `Contact` type and DB schema.
+- `ScanCardForm` is now dead UI (no import path); evaluate delete or re-integrate.
+- Auto-save in `BatchUploadForm` fires without user confirmation.
+
+---
+
 ## Sync — 2026-04-17
 
 Changes pushed from Antigravity session (commits `866046b` → `eca120d`):
