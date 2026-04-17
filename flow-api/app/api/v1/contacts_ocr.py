@@ -21,35 +21,54 @@ BATCH_SEMAPHORE = asyncio.Semaphore(5)
 CARD_SCHEMA: dict[str, Any] = {
     "type": "OBJECT",
     "properties": {
-        "name": {"type": "STRING"},
-        "title": {"type": "STRING"},
-        "company": {"type": "STRING"},
-        "email": {"type": "STRING"},
-        "phone": {"type": "STRING"},
-        "phone_alt": {"type": "STRING"},
-        "address": {"type": "STRING"},
-        "website": {"type": "STRING"},
-        "language": {"type": "STRING"},
-        "raw_text": {"type": "STRING"},
+        "full_name":       {"type": "STRING"},
+        "title":           {"type": "STRING"},
+        "company":         {"type": "STRING"},
+        "industry":        {"type": "STRING"},
+        "phone":           {"type": "STRING"},
+        "other_phone":     {"type": "STRING"},
+        "tel_phone":       {"type": "STRING"},
+        "other_tel":       {"type": "STRING"},
+        "fax":             {"type": "STRING"},
+        "email":           {"type": "STRING"},
+        "other_email":     {"type": "STRING"},
+        "address":         {"type": "STRING"},
+        "website":         {"type": "STRING"},
+        "notes":           {"type": "STRING"},
+        "meeting_context": {"type": "STRING"},
+        "language":        {"type": "STRING"},
+        "raw_text":        {"type": "STRING"},
     },
     "required": ["raw_text"],
 }
 
-PROMPT = """Extract business card fields into strict JSON.
+PROMPT = """You are a business card data extraction agent.
+Extract ALL information from this business card image into strict JSON.
 
-Fields (all optional except raw_text):
-- name: full name as printed
-- title: job title
-- company: organization
-- email: primary email
-- phone: primary phone
-- phone_alt: secondary phone (mobile/tel/fax)
-- address: postal address
-- website: URL
-- language: ISO 639-1 code of dominant text (en, zh, ja, ...)
-- raw_text: verbatim text on card, newline-separated
+Fields to extract:
+- full_name: Full name as printed on card
+- title: Job title or position
+- company: Company or organization name
+- industry: Infer from company name and title
+- phone: Primary phone number (mobile preferred)
+- other_phone: Second phone number if present
+- tel_phone: Office TEL number if labeled TEL
+- other_tel: Additional TEL if present
+- fax: Fax number if present
+- email: Primary email address
+- other_email: Additional email addresses (semicolon separated)
+- address: Full address including postal code and country
+- website: Website URL
+- notes: Slogans, registration numbers (MST), or extra text
+- meeting_context: Any event names or dates printed on card
+- language: ISO 639-1 code of primary language on card
+- raw_text: All text on the card exactly as printed
 
-Respond with JSON only."""
+Rules:
+- Return ONLY valid JSON, no markdown, no explanation
+- Use null for fields not found
+- phone fields: preserve the original format including country codes
+- If multiple phones exist, fill phone first, then other_phone, tel_phone, other_tel, fax in order"""
 
 
 def _encode_jpeg(image_bytes: bytes) -> str:
@@ -102,6 +121,9 @@ async def _call_gemini(image_bytes: bytes) -> dict[str, Any]:
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         parsed = json.loads(text)
+        # Map to frontend OcrResult field names while keeping extra fields
+        parsed["name"] = parsed.pop("full_name", None)
+        parsed["phone_alt"] = parsed.pop("other_phone", None)
         print(f"GEMINI PARSED: {parsed}")
         return parsed
     except (KeyError, IndexError, json.JSONDecodeError) as e:
