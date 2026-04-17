@@ -28,3 +28,17 @@ Carry-forward (non-blocking):
 - Legacy public `contact-cards` (singular) bucket cleanup — 23 objects need
   re-pathing before bucket drop
 - Re-audit `GEMINI_API_KEY` loading during B3
+
+### Phase C — namecard-ocr frontend — COMPLETE 2026-04-17
+All three entry points working. OCR extracts 17 fields.
+Auto-crop, retry logic, dual-side flow all verified.
+
+Artifacts:
+- C8 integration tests (PASS 5/5): `docs/vault/02-features/namecard-ocr/phase-c-integration-test.md`
+- Code registry (delta scan): `docs/vault/03-architecture/code-registry/contacts-module.md`
+
+Carry-forward to Phase D:
+- `BatchUploadForm.tsx` at 601 lines — split before Phase D additions
+- `ScanCardForm.tsx` now unreachable from UI — evaluate delete or re-integrate
+- `contact-cards` (singular, public) legacy bucket — delete in D0-pre
+- Schema drift migration 013b applied, git now in sync
