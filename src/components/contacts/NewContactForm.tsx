@@ -67,8 +67,10 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
   const [showCropEditor, setShowCropEditor] = useState(false);
   const [currentSide, setCurrentSide] = useState<'front' | 'back'>('front');
   const [showOcrConsent, setShowOcrConsent] = useState(false);
+  const [showAddBack, setShowAddBack] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'new' });
 
@@ -86,31 +88,45 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
     await processFile(file);
   };
 
-  const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
+  const handleCropConfirm = async (blob: Blob, side: 'front' | 'back') => {
     setShowCropEditor(false);
     const url = URL.createObjectURL(blob);
     if (side === 'front') {
       setFrontBlob(blob);
       setFrontPreview(url);
       setFrontCardImage(url);
+      setShowOcrConsent(true);
     } else {
       setBackBlob(blob);
       setBackPreview(url);
       setBackCardImage(url);
+      // Back side cropped — run OCR on it so alt_language + back_ocr populate.
+      await confirmCrop(blob, 'back');
     }
-    if (side === 'front') setShowOcrConsent(true);
   };
 
   const handleAutoFill = async () => {
     setShowOcrConsent(false);
     if (!frontBlob) return;
     await confirmCrop(frontBlob, 'front');
-    if (backBlob) await confirmCrop(backBlob, 'back');
   };
 
   const handleManualEntry = () => {
     setShowOcrConsent(false);
     resetProcessor();
+  };
+
+  const handleAddBack = () => {
+    setShowAddBack(false);
+    setCurrentSide('back');
+    backInputRef.current?.click();
+  };
+
+  const handleSkipBack = async () => {
+    setShowAddBack(false);
+    if (backBlob) {
+      await confirmCrop(backBlob, 'back');
+    }
   };
 
   // Auto-open the crop editor the moment preprocessing finishes.
@@ -133,6 +149,10 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       if (state.front.website) setWebsite(state.front.website);
       setMissingFields(state.status === 'ocr_partial' ? state.missingFields : []);
       setOcrError(null);
+      // Front-only result (no back yet): prompt to add a back side.
+      if (!state.back && !backBlob) {
+        setShowAddBack(true);
+      }
     }
     if (state.status === 'ocr_failure') {
       setOcrError(state.error || "Card couldn't be read — filling manually");
@@ -141,8 +161,23 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
+  const resetCardState = () => {
+    setFrontBlob(null);
+    setBackBlob(null);
+    setFrontPreview(null);
+    setBackPreview(null);
+    setFrontCardImage('');
+    setBackCardImage('');
+    setShowCropEditor(false);
+    setShowOcrConsent(false);
+    setShowAddBack(false);
+    setOcrError(null);
+    setMissingFields([]);
+    resetProcessor();
+  };
+
   const handleCreate = () => {
-    addContact({
+    const payload: any = {
       displayName: displayName.trim() || 'New Contact',
       firstName: firstName.trim() || undefined,
       lastName: lastName.trim() || undefined,
@@ -165,8 +200,22 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
       linkedEventIds: [],
       linkedTaskIds: [],
       linkedNoteIds: [],
-    });
-    onClose();
+    };
+    if (state.status === 'ocr_success' || state.status === 'ocr_partial') {
+      payload.front_ocr = state.front;
+      payload.back_ocr = state.back ?? null;
+      payload.alt_language = state.back?.language ?? null;
+    }
+    addContact(payload);
+    setSuccessMessage('Contact saved! Add another or close.');
+    setTimeout(() => {
+      setSuccessMessage(null);
+      resetCardState();
+      setFirstName(''); setLastName(''); setCompany(''); setJobTitle('');
+      setDepartment(''); setPhone(''); setEmail(''); setLinkedIn('');
+      setWebsite(''); setAddress(''); setCity(''); setCountry('');
+      setNote('');
+    }, 2000);
   };
 
   return (
@@ -247,6 +296,12 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
           {ocrError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
               {ocrError}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+              {successMessage}
             </div>
           )}
 
@@ -335,7 +390,7 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
           <AlertDialogHeader>
             <AlertDialogTitle>Auto-fill from this card?</AlertDialogTitle>
             <AlertDialogDescription>
-              Fields can be edited after. Back side will also be read if you added one.
+              Fields can be edited after. You'll be asked about a back side next.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -345,6 +400,21 @@ export const NewContactForm: React.FC<NewContactFormProps> = ({ open, onClose, p
             <AlertDialogAction onClick={handleAutoFill}>
               Fill automatically
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showAddBack}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add back side of card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Useful when the back has a secondary language or extra info. Optional.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleSkipBack}>Skip</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAddBack}>Add back side</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

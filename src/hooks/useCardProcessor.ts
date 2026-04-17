@@ -57,6 +57,79 @@ export async function preprocessImage(file: File): Promise<Blob> {
   });
 }
 
+// Shared edge-scan algorithm. Given raw ImageData + dimensions, returns
+// the inferred card bounds as percentages of the source image.
+function scanEdges(
+  imageData: ImageData,
+  width: number,
+  height: number,
+): CropBounds {
+  const pixels = imageData.data;
+
+  const brightnessAt = (x: number, y: number): number => {
+    const idx = (y * width + x) * 4;
+    return (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+  };
+
+  const cornerBrightness =
+    (brightnessAt(0, 0) +
+      brightnessAt(width - 1, 0) +
+      brightnessAt(0, height - 1) +
+      brightnessAt(width - 1, height - 1)) /
+    4;
+
+  const THRESHOLD = 25;
+  const SAMPLE_STEP = Math.max(1, Math.floor(Math.min(width, height) / 200));
+
+  const rowDiffers = (y: number): boolean => {
+    let differing = 0;
+    for (let x = 0; x < width; x += SAMPLE_STEP) {
+      if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
+        differing++;
+        if (differing > 3) return true;
+      }
+    }
+    return false;
+  };
+
+  const colDiffers = (x: number): boolean => {
+    let differing = 0;
+    for (let y = 0; y < height; y += SAMPLE_STEP) {
+      if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
+        differing++;
+        if (differing > 3) return true;
+      }
+    }
+    return false;
+  };
+
+  let top = 0;
+  for (let y = 0; y < height; y += SAMPLE_STEP) {
+    if (rowDiffers(y)) { top = y; break; }
+  }
+  let bottom = height - 1;
+  for (let y = height - 1; y >= 0; y -= SAMPLE_STEP) {
+    if (rowDiffers(y)) { bottom = y; break; }
+  }
+  let left = 0;
+  for (let x = 0; x < width; x += SAMPLE_STEP) {
+    if (colDiffers(x)) { left = x; break; }
+  }
+  let right = width - 1;
+  for (let x = width - 1; x >= 0; x -= SAMPLE_STEP) {
+    if (colDiffers(x)) { right = x; break; }
+  }
+
+  if (right <= left || bottom <= top) return FALLBACK_BOUNDS;
+
+  return {
+    left: (left / width) * 100,
+    top: (top / height) * 100,
+    width: ((right - left) / width) * 100,
+    height: ((bottom - top) / height) * 100,
+  };
+}
+
 export async function detectCardBounds(imageUrl: string): Promise<CropBounds> {
   try {
     if (typeof OffscreenCanvas === 'undefined') return FALLBACK_BOUNDS;
@@ -70,99 +143,41 @@ export async function detectCardBounds(imageUrl: string): Promise<CropBounds> {
     if (!ctx) return FALLBACK_BOUNDS;
 
     ctx.drawImage(bitmap, 0, 0);
-    const { data, width, height } = ctx.getImageData(
-      0,
-      0,
-      bitmap.width,
-      bitmap.height,
-    );
-
-    const brightnessAt = (x: number, y: number): number => {
-      const idx = (y * width + x) * 4;
-      return (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-    };
-
-    const cornerBrightness =
-      (brightnessAt(0, 0) +
-        brightnessAt(width - 1, 0) +
-        brightnessAt(0, height - 1) +
-        brightnessAt(width - 1, height - 1)) /
-      4;
-
-    const THRESHOLD = 25;
-    const SAMPLE_STEP = Math.max(1, Math.floor(Math.min(width, height) / 200));
-
-    const rowDiffers = (y: number): boolean => {
-      let differing = 0;
-      for (let x = 0; x < width; x += SAMPLE_STEP) {
-        if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
-          differing++;
-          if (differing > 3) return true;
-        }
-      }
-      return false;
-    };
-
-    const colDiffers = (x: number): boolean => {
-      let differing = 0;
-      for (let y = 0; y < height; y += SAMPLE_STEP) {
-        if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
-          differing++;
-          if (differing > 3) return true;
-        }
-      }
-      return false;
-    };
-
-    let top = 0;
-    for (let y = 0; y < height; y += SAMPLE_STEP) {
-      if (rowDiffers(y)) {
-        top = y;
-        break;
-      }
-    }
-
-    let bottom = height - 1;
-    for (let y = height - 1; y >= 0; y -= SAMPLE_STEP) {
-      if (rowDiffers(y)) {
-        bottom = y;
-        break;
-      }
-    }
-
-    let left = 0;
-    for (let x = 0; x < width; x += SAMPLE_STEP) {
-      if (colDiffers(x)) {
-        left = x;
-        break;
-      }
-    }
-
-    let right = width - 1;
-    for (let x = width - 1; x >= 0; x -= SAMPLE_STEP) {
-      if (colDiffers(x)) {
-        right = x;
-        break;
-      }
-    }
-
-    if (right <= left || bottom <= top) {
-      console.log('detectCardBounds result:', FALLBACK_BOUNDS, '(fallback)');
-      return FALLBACK_BOUNDS;
-    }
-
-    const bounds: CropBounds = {
-      left: (left / width) * 100,
-      top: (top / height) * 100,
-      width: ((right - left) / width) * 100,
-      height: ((bottom - top) / height) * 100,
-    };
+    const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    const bounds = scanEdges(imageData, bitmap.width, bitmap.height);
     console.log('detectCardBounds result:', bounds);
     return bounds;
   } catch {
     console.log('detectCardBounds result:', FALLBACK_BOUNDS, '(error fallback)');
     return FALLBACK_BOUNDS;
   }
+}
+
+// DOM-based variant used by the crop editor's "Auto crop" button.
+// Works with blob:/object URLs, data URLs, and same-origin http(s) URLs.
+export async function detectCardBoundsFromUrl(url: string): Promise<CropBounds> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(FALLBACK_BOUNDS);
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+        const bounds = scanEdges(data, img.naturalWidth, img.naturalHeight);
+        console.log('detectCardBoundsFromUrl result:', bounds);
+        resolve(bounds);
+      } catch {
+        resolve(FALLBACK_BOUNDS);
+      }
+    };
+    img.onerror = () => resolve(FALLBACK_BOUNDS);
+    img.src = url;
+  });
 }
 
 async function runOCR(
@@ -239,6 +254,9 @@ export function useCardProcessor(
 ): UseCardProcessorReturn {
   const [state, setState] = useState<CardProcessorState>({ status: 'idle' });
   const currentUrlRef = useRef<string | null>(null);
+  // Accumulates the front-side OCR between sequential confirmCrop calls so
+  // that confirmCrop(_, 'back') can emit a combined { front, back } state.
+  const frontOcrRef = useRef<OcrResult | null>(null);
 
   const revokeCurrentUrl = () => {
     if (currentUrlRef.current) {
@@ -269,11 +287,24 @@ export function useCardProcessor(
       try {
         revokeCurrentUrl();
         setState({ status: 'ocr_running' });
-        const result =
-          side === 'front'
-            ? await runOCR(croppedBlob)
-            : await runOCR(croppedBlob, croppedBlob);
-        setState(classifyOcrResult(result));
+        // Always send the cropped blob as front_image; the API returns its OCR
+        // on the `front` key. We relabel back-side calls in the hook.
+        const response = await runOCR(croppedBlob);
+        const ocrForBlob = response.front;
+
+        if (side === 'front') {
+          frontOcrRef.current = ocrForBlob;
+          setState(classifyOcrResult({ front: ocrForBlob }));
+        } else {
+          const storedFront = frontOcrRef.current;
+          if (!storedFront) {
+            // Edge case: back arrived without a prior front — treat as front.
+            frontOcrRef.current = ocrForBlob;
+            setState(classifyOcrResult({ front: ocrForBlob }));
+          } else {
+            setState(classifyOcrResult({ front: storedFront, back: ocrForBlob }));
+          }
+        }
       } catch (err) {
         setState({
           status: 'ocr_failure',
@@ -297,6 +328,7 @@ export function useCardProcessor(
 
   const reset = useCallback((): void => {
     revokeCurrentUrl();
+    frontOcrRef.current = null;
     setState({ status: 'idle' });
   }, []);
 

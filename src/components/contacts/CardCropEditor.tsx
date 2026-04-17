@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, Wand2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Cropper, CropperRef } from 'react-advanced-cropper';
 import type { CropperState } from 'advanced-cropper';
+import { detectCardBoundsFromUrl } from '@/hooks/useCardProcessor';
 import 'react-advanced-cropper/dist/style.css';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -64,6 +65,17 @@ export function CardCropEditor({
 
   const handleZoomOut = () => {
     cropperRef.current?.zoomImage(0.8);
+  };
+
+  const handleAutoCrop = async () => {
+    if (!imageSrc || !cropperRef.current) return;
+    const bounds = await detectCardBoundsFromUrl(imageSrc);
+    cropperRef.current.setCoordinates((state) => ({
+      left:   (bounds.left   / 100) * state.imageSize.width,
+      top:    (bounds.top    / 100) * state.imageSize.height,
+      width:  (bounds.width  / 100) * state.imageSize.width,
+      height: (bounds.height / 100) * state.imageSize.height,
+    }));
   };
 
   const handleUseCrop = () => {
@@ -156,26 +168,37 @@ export function CardCropEditor({
           )}
         </div>
 
-        {/* ── Zoom controls (shrink-0) ───────────────────────────────────── */}
-        <div className="shrink-0 flex items-center justify-center gap-3 px-4 py-2 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+        {/* ── Toolbar: auto-crop + zoom (shrink-0) ───────────────────────── */}
+        <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60">
           <button
             type="button"
-            onClick={handleZoomOut}
-            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-            title="Zoom out 20%"
+            onClick={handleAutoCrop}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            title="Re-detect card edges and apply"
           >
-            <ZoomOut size={14} />
-            Zoom out −
+            <Wand2 size={14} />
+            Auto crop to edges
           </button>
-          <button
-            type="button"
-            onClick={handleZoomIn}
-            className="inline-flex items-center gap-1.5 px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-            title="Zoom in 20%"
-          >
-            <ZoomIn size={14} />
-            Zoom in +
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              title="Zoom out 20%"
+            >
+              <ZoomOut size={14} />
+              − Zoom
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              title="Zoom in 20%"
+            >
+              <ZoomIn size={14} />
+              + Zoom
+            </button>
+          </div>
         </div>
 
         {/* ── Rotation control (shrink-0) ────────────────────────────────── */}

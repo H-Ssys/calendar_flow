@@ -1,10 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useContactContext } from '@/context/ContactContext';
-import { Contact } from '@/types/contact';
+import { Contact, OcrResult } from '@/types/contact';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Camera, Sparkles, Upload } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Camera, Check, Sparkles, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CardCropEditor } from '@/components/contacts/CardCropEditor';
 import { useCardProcessor } from '@/hooks/useCardProcessor';
@@ -15,15 +25,25 @@ interface ScanCardFormProps {
   onExtracted?: (data: Partial<Contact>) => void;
 }
 
+type UploadStep =
+  | 'idle'
+  | 'front_crop'
+  | 'front_ocr'
+  | 'ask_back'
+  | 'back_crop'
+  | 'back_ocr'
+  | 'done';
+
 interface CardSlotProps {
   side: 'Front' | 'Back';
   image?: string;
   onPickFile: (file: File) => void;
   onCropClick?: () => void;
   primary?: boolean;
+  disabled?: boolean;
 }
 
-const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClick, primary }) => {
+const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClick, primary, disabled }) => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,9 +57,11 @@ const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClic
     <div className="space-y-2">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{side} Side</div>
       <button
+        disabled={disabled}
         className={cn(
           "aspect-[3.5/2] w-full rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer transition-colors overflow-hidden",
-          image ? "p-0 border-solid" : "hover:bg-primary/5 hover:border-primary/30"
+          image ? "p-0 border-solid" : "hover:bg-primary/5 hover:border-primary/30",
+          disabled && "opacity-60 cursor-not-allowed",
         )}
         onClick={() => image ? onCropClick?.() : fileRef.current?.click()}
         title={image ? `Crop ${side.toLowerCase()} side` : `Upload ${side.toLowerCase()} side`}
@@ -58,6 +80,7 @@ const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClic
           variant={primary ? 'default' : 'outline'}
           className="flex-1 gap-1.5"
           size="sm"
+          disabled={disabled}
           onClick={() => fileRef.current?.click()}
         >
           <Upload className="w-3.5 h-3.5" />
@@ -67,6 +90,7 @@ const CardSlot: React.FC<CardSlotProps> = ({ side, image, onPickFile, onCropClic
           <Button
             variant="outline"
             size="sm"
+            disabled={disabled}
             className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
             onClick={onCropClick}
             title="Open crop editor"
@@ -89,23 +113,25 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
   const [frontBlob, setFrontBlob] = useState<Blob | null>(null);
   const [backBlob, setBackBlob] = useState<Blob | null>(null);
   const [note, setNote] = useState('');
-  const [extracting, setExtracting] = useState(false);
+  const [step, setStep] = useState<UploadStep>('idle');
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Crop editor state
   const [cropOpen, setCropOpen] = useState(false);
-  // Track which slot is currently in the crop editor
   const cropSlotRef = useRef<'front' | 'back'>('front');
-  // Track the original File per side so re-cropping from a thumbnail re-runs processFile
   const frontFileRef = useRef<File | null>(null);
   const backFileRef = useRef<File | null>(null);
+  // Hidden input we programmatically click when user picks "Add back side"
+  const backInputRef = useRef<HTMLInputElement>(null);
 
   const handlePickFile = async (side: 'front' | 'back', file: File) => {
     cropSlotRef.current = side;
     if (side === 'front') frontFileRef.current = file;
     else backFileRef.current = file;
     setOcrError(null);
+    setStep(side === 'front' ? 'front_crop' : 'back_crop');
     await processFile(file);
   };
 
@@ -113,83 +139,95 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
     const file = side === 'front' ? frontFileRef.current : backFileRef.current;
     if (!file) return;
     cropSlotRef.current = side;
+    setStep(side === 'front' ? 'front_crop' : 'back_crop');
     await processFile(file);
   };
 
-  // Auto-open the crop editor as soon as processFile finishes preprocessing.
+  // Auto-open crop editor once preprocessing completes
   useEffect(() => {
     if (state.status === 'crop_pending') {
       setCropOpen(true);
     }
   }, [state.status]);
 
-  const handleCropConfirm = (blob: Blob, side: 'front' | 'back') => {
+  // Crop confirmed → run OCR for this side immediately
+  const handleCropConfirm = async (blob: Blob, side: 'front' | 'back') => {
     const previewUrl = URL.createObjectURL(blob);
     if (side === 'front') {
       setFrontBlob(blob);
       setFrontImage(previewUrl);
+      setStep('front_ocr');
     } else {
       setBackBlob(blob);
       setBackImage(previewUrl);
+      setStep('back_ocr');
     }
     setCropOpen(false);
+    await confirmCrop(blob, side);
   };
 
   const handleCropRedo = () => {
     setCropOpen(false);
     resetProcessor();
+    // Preserve prior progress: user just cancelled the current crop.
+    if (step === 'front_crop') setStep('idle');
+    if (step === 'back_crop') setStep('ask_back');
   };
 
-  const handleExtract = async () => {
-    if (!frontBlob) return;
-    setOcrError(null);
-    setMissingFields([]);
-    setExtracting(true);
-    await confirmCrop(frontBlob, 'front');
-    if (backBlob) await confirmCrop(backBlob, 'back');
-  };
-
+  // React to OCR completion
   useEffect(() => {
     if (state.status === 'ocr_success' || state.status === 'ocr_partial') {
-      setExtracting(false);
       if (state.status === 'ocr_partial') {
         setMissingFields(state.missingFields);
-      }
-      const extracted: Partial<Contact> = {
-        displayName: state.front.name ?? '',
-        email: state.front.email ?? '',
-        phone: state.front.phone ?? '',
-        company: state.front.company ?? '',
-        jobTitle: state.front.title ?? '',
-        frontCardImage: frontImage,
-        backCardImage: backImage || undefined,
-        note: note || undefined,
-        front_ocr: state.front,
-        back_ocr: state.back ?? null,
-        alt_language: state.back?.language ?? null,
-      };
-      if (onExtracted) {
-        onExtracted(extracted);
       } else {
-        addContact({
-          ...(extracted as any),
-          tags: [],
-          starred: false,
-          linkedEventIds: [],
-          linkedTaskIds: [],
-          linkedNoteIds: [],
-        });
+        setMissingFields([]);
       }
-      onClose();
+
+      // If state has both front + back OCR, we're done. Otherwise ask for back.
+      if (state.back) {
+        saveAndReset(state.front, state.back);
+      } else {
+        setStep('ask_back');
+      }
     }
     if (state.status === 'ocr_failure') {
-      setExtracting(false);
       setOcrError(state.error);
+      setStep('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
-  const reset = () => {
+  const saveAndReset = (front: OcrResult, back: OcrResult | undefined) => {
+    const extracted = classifyExtracted(front, back);
+    const payload: Partial<Contact> = {
+      ...extracted,
+      frontCardImage: frontImage,
+      backCardImage: backImage || undefined,
+      note: note || undefined,
+    };
+
+    if (onExtracted) {
+      onExtracted(payload);
+    } else {
+      addContact({
+        ...(payload as any),
+        tags: [],
+        starred: false,
+        linkedEventIds: [],
+        linkedTaskIds: [],
+        linkedNoteIds: [],
+      });
+    }
+
+    setStep('done');
+    setSuccessMessage('Contact saved! Upload another card or close.');
+    setTimeout(() => {
+      setSuccessMessage(null);
+      resetLocal();
+    }, 2000);
+  };
+
+  const resetLocal = () => {
     setFrontImage('');
     setBackImage('');
     setFrontBlob(null);
@@ -200,12 +238,32 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
     backFileRef.current = null;
     setOcrError(null);
     setMissingFields([]);
+    setStep('idle');
     resetProcessor();
   };
 
+  const handleAddBack = () => {
+    backInputRef.current?.click();
+  };
+
+  const handleSkipBack = () => {
+    if (state.status === 'ocr_success' || state.status === 'ocr_partial') {
+      saveAndReset(state.front, state.back);
+    }
+  };
+
+  const handleBackInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    void handlePickFile('back', file);
+  };
+
+  const busy = step === 'front_ocr' || step === 'back_ocr';
+
   return (
     <>
-      <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
+      <Dialog open={open} onOpenChange={v => { if (!v) { resetLocal(); onClose(); } }}>
         <DialogContent className="max-w-lg p-0 gap-0">
           <DialogHeader className="px-6 py-4 border-b border-border">
             <DialogTitle className="flex items-center gap-2">
@@ -213,7 +271,7 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
               Scan Business Card
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Upload card images — crop to align, then AI extracts contact info
+              Upload front, crop, then optionally add a back side
             </p>
           </DialogHeader>
 
@@ -224,6 +282,7 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
                 image={frontImage}
                 onPickFile={file => handlePickFile('front', file)}
                 onCropClick={() => openCropFor('front')}
+                disabled={busy}
                 primary
               />
               <CardSlot
@@ -231,8 +290,18 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
                 image={backImage}
                 onPickFile={file => handlePickFile('back', file)}
                 onCropClick={() => openCropFor('back')}
+                disabled={busy || !frontImage}
               />
             </div>
+
+            {/* Hidden back input for the "Add back side" prompt */}
+            <input
+              ref={backInputRef}
+              type="file"
+              accept="image/*,.heic"
+              className="hidden"
+              onChange={handleBackInputChange}
+            />
 
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-muted-foreground">Note (optional)</div>
@@ -244,10 +313,12 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
               />
             </div>
 
-            {extracting && (
+            {busy && (
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-                <span className="text-sm text-primary">Extracting contact information...</span>
+                <span className="text-sm text-primary">
+                  {step === 'front_ocr' ? 'Reading front side…' : 'Reading back side…'}
+                </span>
               </div>
             )}
 
@@ -257,30 +328,28 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
               </div>
             )}
 
-            {missingFields.length > 0 && (
+            {missingFields.length > 0 && !successMessage && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <span className="text-sm text-amber-700">
-                  Missing fields detected: {missingFields.join(', ')}. Please review.
+                  Missing fields: {missingFields.join(', ')}. Please review in the detail view.
                 </span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                <Check className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-green-700">{successMessage}</span>
               </div>
             )}
           </div>
 
           <DialogFooter className="px-6 py-4 border-t border-border">
-            <Button variant="outline" onClick={onClose} disabled={extracting}>Cancel</Button>
-            <Button
-              onClick={handleExtract}
-              disabled={!frontBlob || extracting}
-              className="gap-1.5"
-            >
-              <Sparkles className="w-4 h-4" />
-              {extracting ? 'Extracting...' : 'Extract Info'}
-            </Button>
+            <Button variant="outline" onClick={onClose} disabled={busy}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* CardCropEditor — opens on top of ScanCardForm after image is selected */}
       <CardCropEditor
         isOpen={cropOpen}
         imageSrc={state.status === 'crop_pending' ? state.imageUrl : ''}
@@ -289,6 +358,39 @@ export const ScanCardForm: React.FC<ScanCardFormProps> = ({ open, onClose, onExt
         onConfirm={(blob, side) => handleCropConfirm(blob, side)}
         onRedo={handleCropRedo}
       />
+
+      {/* "Add back side?" prompt — shown after front OCR completes */}
+      <AlertDialog open={step === 'ask_back'}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add back side of card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The back often has a secondary language or extra contact info. Optional — skip to save now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleSkipBack}>Skip</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAddBack}>Add back side</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
+
+// Map OCR result(s) to Partial<Contact> payload shape used by addContact / onExtracted.
+function classifyExtracted(
+  front: OcrResult,
+  back: OcrResult | undefined,
+): Partial<Contact> {
+  return {
+    displayName: front.name ?? '',
+    email: front.email ?? '',
+    phone: front.phone ?? '',
+    company: front.company ?? '',
+    jobTitle: front.title ?? '',
+    front_ocr: front,
+    back_ocr: back ?? null,
+    alt_language: back?.language ?? null,
+  };
+}

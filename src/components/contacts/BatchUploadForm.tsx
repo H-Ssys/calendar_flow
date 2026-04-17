@@ -112,6 +112,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   ]);
   const [extracting, setExtracting] = useState(false);
   const [countdowns, setCountdowns] = useState<Record<number, number>>({});
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   const { state, processFile, confirmCrop, reset: resetProcessor } = useCardProcessor({ mode: 'batch' });
   const processingIndexRef = useRef<number>(-1);
@@ -320,6 +321,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   );
 
   const handleSaveAll = () => {
+    const savedIds = new Set(saveableCards.map(c => c.id));
     saveableCards.forEach(card => {
       addContact({
         displayName: card.extracted?.name?.trim() || 'New Contact',
@@ -340,7 +342,19 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
         linkedNoteIds: [],
       } as any);
     });
-    onClose();
+
+    const count = savedIds.size;
+    setSaveSuccessMsg(`${count} contact${count === 1 ? '' : 's'} saved`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+
+    // Drop saved cards, keep failed + unconfirmed. Top up with a fresh empty slot.
+    setCards(prev => {
+      const remaining = prev.filter(c => !savedIds.has(c.id));
+      return remaining.length > 0 ? remaining : [{ id: uuid() }, { id: uuid() }];
+    });
+    setCountdowns({});
+    processingIndexRef.current = -1;
+    flowRef.current = 'crop';
   };
 
   const reset = () => {
@@ -453,6 +467,12 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
                     style={{ width: `${validCards.length > 0 ? (extractedCount / validCards.length) * 100 : 0}%` }}
                   />
                 </div>
+              </div>
+            )}
+
+            {saveSuccessMsg && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                {saveSuccessMsg} — add more cards or close.
               </div>
             )}
           </div>
