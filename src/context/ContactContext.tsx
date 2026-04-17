@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Contact, CONTACT_COLORS } from '@/types/contact';
 import { uuid } from '@/lib/utils';
+import { supabase } from '@ofative/supabase-client';
+import { useAuthContext } from '@/context/AuthContext';
+
+// NOTE: contact fetch still uses local mock state. When wired to Supabase in D5,
+// the query must target the `active_contacts` view (WHERE deleted_at IS NULL), per
+// docs/vault/02-features/namecard-ocr/contract.md §"DB constraints".
 
 const MOCK_CONTACTS: Contact[] = [
   {
@@ -59,6 +65,8 @@ interface ContactContextType {
   updateContact: (id: string, data: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
   toggleStar: (id: string) => void;
+  addContactReference: (contactId: string, refId: string, label?: string) => Promise<void>;
+  removeContactReference: (contactId: string, refId: string) => Promise<void>;
 }
 
 const ContactContext = createContext<ContactContextType | undefined>(undefined);
@@ -71,6 +79,7 @@ export const useContactContext = () => {
 
 export const ContactProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [contacts, setContacts] = useState<Contact[]>(MOCK_CONTACTS);
+  const { user } = useAuthContext();
 
   const addContact = (data: Omit<Contact, 'id' | 'createdAt'>) => {
     const newContact: Contact = {
@@ -95,8 +104,48 @@ export const ContactProvider: React.FC<{ children: ReactNode }> = ({ children })
     setContacts(prev => prev.map(c => c.id === id ? { ...c, starred: !c.starred } : c));
   };
 
+  // Symmetric pair storage: always sort IDs so source_contact_id < target_contact_id.
+  // See contract.md §"DB constraints" (3) and migration 013's CHECK constraint.
+  const addContactReference = async (
+    contactId: string,
+    refId: string,
+    label?: string,
+  ): Promise<void> => {
+    if (!user) return;
+    const [src, tgt] = [contactId, refId].sort();
+    await supabase.from('contact_references').insert({
+      user_id: user.id,
+      source_contact_id: src,
+      target_contact_id: tgt,
+      reference_label: label ?? null,
+    });
+  };
+
+  const removeContactReference = async (
+    contactId: string,
+    refId: string,
+  ): Promise<void> => {
+    if (!user) return;
+    const [src, tgt] = [contactId, refId].sort();
+    await supabase
+      .from('contact_references')
+      .delete()
+      .eq('source_contact_id', src)
+      .eq('target_contact_id', tgt);
+  };
+
   return (
-    <ContactContext.Provider value={{ contacts, addContact, updateContact, deleteContact, toggleStar }}>
+    <ContactContext.Provider
+      value={{
+        contacts,
+        addContact,
+        updateContact,
+        deleteContact,
+        toggleStar,
+        addContactReference,
+        removeContactReference,
+      }}
+    >
       {children}
     </ContactContext.Provider>
   );
