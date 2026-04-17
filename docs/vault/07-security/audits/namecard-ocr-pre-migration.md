@@ -101,6 +101,24 @@ context.
 - [8b] Bucket policy pins folder[1] to auth.uid() — path traversal not possible.
 - [9] No hardcoded Gemini API key anywhere in the repo today.
 
+## D0-pre Addendum — 2026-04-17
+
+**Legacy `contact-cards` bucket (singular, public):** PENDING DELETION
+
+Checked during D0-pre gate:
+- 23 objects remain in `storage.objects WHERE bucket_id = 'contact-cards'`
+- 2 contacts (JAY KIM `919f87a3`, Lee Jae Hyun `9c81887e`) have `front_image_url`
+  and `back_image_url` pointing to this bucket — cannot delete until URLs are
+  migrated or NULLed
+- Remaining 21 objects are orphaned test files with no contact linkage
+- Bucket deletion deferred to D-phase; not a hard blocker for feature development
+
+**Schema drift capture:** Migration `014_schema_drift_capture.sql` added —
+`daily_journals` and `user_settings` tables existed in DB without migration
+coverage. Both now documented with RLS. Applied 2026-04-17.
+
+---
+
 ## Decision
 
 **A5 is CLEAR to proceed.** The single FAIL has been fixed in ADR-023
