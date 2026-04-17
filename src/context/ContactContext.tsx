@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Contact, CONTACT_COLORS } from '@/types/contact';
+import { uuid } from '@/lib/utils';
 
 const MOCK_CONTACTS: Contact[] = [
   {
@@ -74,7 +75,7 @@ export const ContactProvider: React.FC<{ children: ReactNode }> = ({ children })
   const addContact = (data: Omit<Contact, 'id' | 'createdAt'>) => {
     const newContact: Contact = {
       ...data,
-      id: crypto.randomUUID(),
+      id: uuid(),
       createdAt: new Date().toISOString(),
       color: data.color || CONTACT_COLORS[contacts.length % CONTACT_COLORS.length],
     };

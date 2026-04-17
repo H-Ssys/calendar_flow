@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Upload, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, uuid } from '@/lib/utils';
 import { useCardProcessor, preprocessImage } from '@/hooks/useCardProcessor';
 import { CardCropEditor } from '@/components/contacts/CardCropEditor';
 
@@ -107,8 +107,8 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   const { addContact } = useContactContext();
 
   const [cards, setCards] = useState<ProcessedCard[]>([
-    { id: crypto.randomUUID() },
-    { id: crypto.randomUUID() },
+    { id: uuid() },
+    { id: uuid() },
   ]);
   const [extracting, setExtracting] = useState(false);
   const [countdowns, setCountdowns] = useState<Record<number, number>>({});
@@ -144,7 +144,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
 
   const addCard = () => {
     if (cards.length >= maxCards) return;
-    setCards(prev => [...prev, { id: crypto.randomUUID() }]);
+    setCards(prev => [...prev, { id: uuid() }]);
   };
 
   // ── Per-card crop flow ────────────────────────────────────────────────────
@@ -344,7 +344,7 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
   };
 
   const reset = () => {
-    setCards([{ id: crypto.randomUUID() }, { id: crypto.randomUUID() }]);
+    setCards([{ id: uuid() }, { id: uuid() }]);
     setCountdowns({});
     setExtracting(false);
     processingIndexRef.current = -1;

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useAuthContext } from './AuthContext';
+import { uuid } from '@/lib/utils';
 import * as eventSupabaseService from '@/services/supabase/eventSupabaseService';
 import * as settingsService from '@/services/supabase/settingsSupabaseService';
 import type { SettingsBlob } from '@/services/supabase/settingsSupabaseService';
@@ -271,7 +272,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
 
     const addEventLog = useCallback((log: Omit<EventLog, 'id' | 'timestamp'>) => {
-        const newLog: EventLog = { ...log, id: crypto.randomUUID(), timestamp: new Date() };
+        const newLog: EventLog = { ...log, id: uuid(), timestamp: new Date() };
         setEventLogs(prev => [newLog, ...prev]);
     }, []);
 
@@ -408,7 +409,7 @@ export const CalendarProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
 
     const addEvent = useCallback((event: Omit<Event, 'id'>, source: EventLogSource = 'unknown'): Event => {
-        const newEvent = { ...event, id: crypto.randomUUID() } as Event;
+        const newEvent = { ...event, id: uuid() } as Event;
 
         // Optimistic local update
         setEvents(prev => [...prev, newEvent]);

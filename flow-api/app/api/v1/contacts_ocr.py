@@ -97,10 +97,15 @@ async def _call_gemini(image_bytes: bytes) -> dict[str, Any]:
         except httpx.HTTPError as e:
             return {"raw_text": None, "error": f"http_error: {e}"}
 
+    print(f"GEMINI RAW RESPONSE: {json.dumps(data, indent=2)[:2000]}")
+
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+        parsed = json.loads(text)
+        print(f"GEMINI PARSED: {parsed}")
+        return parsed
     except (KeyError, IndexError, json.JSONDecodeError) as e:
+        print(f"GEMINI PARSE ERROR: {e} | raw: {data}")
         return {"raw_text": None, "error": f"parse_error: {e}"}
 
 
