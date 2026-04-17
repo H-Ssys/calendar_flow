@@ -129,6 +129,11 @@ export function CardCropEditor({
           </div>
         )}
 
+        {/* ── Always-on crop instruction (shrink-0) ──────────────────────── */}
+        <div className="shrink-0 text-xs text-center bg-amber-50 text-amber-700 border-b border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 py-1 px-2">
+          Drag the corners to adjust the crop area
+        </div>
+
         {/* ── Cropper (flex-1 + min-h-0 so it shrinks to fit) ────────────── */}
         <div className="flex-1 min-h-0 overflow-hidden bg-neutral-100 dark:bg-neutral-900 flex items-center justify-center p-4">
           {imageSrc ? (

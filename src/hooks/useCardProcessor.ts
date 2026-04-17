@@ -6,7 +6,10 @@ import type {
   OcrResult,
 } from '@/types/contact';
 
-const REQUIRED_FIELDS = ['name', 'email', 'phone', 'company'] as const;
+// Only 'name' is truly required — a card without a name is unreadable.
+// email / phone / company are "useful-but-optional" — missing any of them
+// yields ocr_partial so the form still prefills what it can.
+const OPTIONAL_CONTACT_FIELDS = ['email', 'phone', 'company'] as const;
 
 const MOCK_OCR: OcrResult = {
   name: 'Tanaka Kenji',
@@ -19,7 +22,9 @@ const MOCK_OCR: OcrResult = {
     'Tanaka Kenji Product Director Softbank Corp k.tanaka@softbank.co.jp +81 90-1234-5678',
 };
 
-const FALLBACK_BOUNDS: CropBounds = { left: 5, top: 5, width: 90, height: 90 };
+// Tight fallback so the stencil is visibly inset — makes it obvious to the
+// user that a crop frame is present even when edge detection bails out.
+const FALLBACK_BOUNDS: CropBounds = { left: 10, top: 15, width: 80, height: 70 };
 
 async function getAuthHeader(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -190,15 +195,22 @@ function classifyOcrResult(result: {
   front: OcrResult;
   back?: OcrResult;
 }): CardProcessorState {
-  const missingFields = REQUIRED_FIELDS.filter((field) => {
-    const value = result.front[field];
+  const front = result.front;
+
+  // Truly unreadable only when we have neither a name nor any raw text.
+  if (!front.name && !front.raw_text) {
+    return {
+      status: 'ocr_failure',
+      error: 'Card unreadable — please enter manually',
+    };
+  }
+
+  const missingFields = OPTIONAL_CONTACT_FIELDS.filter((field) => {
+    const value = front[field];
     return value === null || value === undefined || value === '';
   });
 
-  if (missingFields.length === 0) {
-    return { status: 'ocr_success', front: result.front, back: result.back };
-  }
-  if (missingFields.length <= 2) {
+  if (missingFields.length > 0) {
     return {
       status: 'ocr_partial',
       front: result.front,
@@ -206,10 +218,8 @@ function classifyOcrResult(result: {
       missingFields: [...missingFields],
     };
   }
-  return {
-    status: 'ocr_failure',
-    error: 'Card unreadable — please enter manually',
-  };
+
+  return { status: 'ocr_success', front: result.front, back: result.back };
 }
 
 export interface UseCardProcessorOptions {
