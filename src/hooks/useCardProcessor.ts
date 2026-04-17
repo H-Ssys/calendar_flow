@@ -57,78 +57,90 @@ export async function preprocessImage(file: File): Promise<Blob> {
   });
 }
 
-// Shared edge-scan algorithm. Given raw ImageData + dimensions, returns
-// the inferred card bounds as percentages of the source image.
 function scanEdges(
-  imageData: ImageData,
+  data: ImageData,
   width: number,
   height: number,
 ): CropBounds {
-  const pixels = imageData.data;
+  const pixels = data.data;
 
-  const brightnessAt = (x: number, y: number): number => {
-    const idx = (y * width + x) * 4;
-    return (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
-  };
+  function getBrightness(x: number, y: number): number {
+    const i = (y * width + x) * 4;
+    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  }
 
-  const cornerBrightness =
-    (brightnessAt(0, 0) +
-      brightnessAt(width - 1, 0) +
-      brightnessAt(0, height - 1) +
-      brightnessAt(width - 1, height - 1)) /
-    4;
+  const corners = [
+    getBrightness(2, 2),
+    getBrightness(width - 3, 2),
+    getBrightness(2, height - 3),
+    getBrightness(width - 3, height - 3),
+  ];
+  const bgBrightness = corners.reduce((a, b) => a + b, 0) / 4;
 
-  const THRESHOLD = 25;
-  const SAMPLE_STEP = Math.max(1, Math.floor(Math.min(width, height) / 200));
+  const isDarkBackground = bgBrightness < 100;
+  const threshold = isDarkBackground ? 40 : 30;
 
-  const rowDiffers = (y: number): boolean => {
-    let differing = 0;
-    for (let x = 0; x < width; x += SAMPLE_STEP) {
-      if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
-        differing++;
-        if (differing > 3) return true;
-      }
+  let top = 0, bottom = height - 1, left = 0, right = width - 1;
+
+  for (let y = 0; y < height * 0.4; y++) {
+    let rowDiff = 0;
+    for (let x = Math.floor(width * 0.2); x < width * 0.8; x += 5) {
+      rowDiff += Math.abs(getBrightness(x, y) - bgBrightness);
     }
-    return false;
-  };
+    rowDiff /= (width * 0.6 / 5);
+    if (rowDiff > threshold) { top = Math.max(0, y - 2); break; }
+  }
 
-  const colDiffers = (x: number): boolean => {
-    let differing = 0;
-    for (let y = 0; y < height; y += SAMPLE_STEP) {
-      if (Math.abs(brightnessAt(x, y) - cornerBrightness) > THRESHOLD) {
-        differing++;
-        if (differing > 3) return true;
-      }
+  for (let y = height - 1; y > height * 0.6; y--) {
+    let rowDiff = 0;
+    for (let x = Math.floor(width * 0.2); x < width * 0.8; x += 5) {
+      rowDiff += Math.abs(getBrightness(x, y) - bgBrightness);
     }
-    return false;
-  };
-
-  let top = 0;
-  for (let y = 0; y < height; y += SAMPLE_STEP) {
-    if (rowDiffers(y)) { top = y; break; }
-  }
-  let bottom = height - 1;
-  for (let y = height - 1; y >= 0; y -= SAMPLE_STEP) {
-    if (rowDiffers(y)) { bottom = y; break; }
-  }
-  let left = 0;
-  for (let x = 0; x < width; x += SAMPLE_STEP) {
-    if (colDiffers(x)) { left = x; break; }
-  }
-  let right = width - 1;
-  for (let x = width - 1; x >= 0; x -= SAMPLE_STEP) {
-    if (colDiffers(x)) { right = x; break; }
+    rowDiff /= (width * 0.6 / 5);
+    if (rowDiff > threshold) { bottom = Math.min(height - 1, y + 2); break; }
   }
 
-  if (right <= left || bottom <= top) return FALLBACK_BOUNDS;
+  for (let x = 0; x < width * 0.4; x++) {
+    let colDiff = 0;
+    for (let y = Math.floor(height * 0.2); y < height * 0.8; y += 5) {
+      colDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+    }
+    colDiff /= (height * 0.6 / 5);
+    if (colDiff > threshold) { left = Math.max(0, x - 2); break; }
+  }
+
+  for (let x = width - 1; x > width * 0.6; x--) {
+    let colDiff = 0;
+    for (let y = Math.floor(height * 0.2); y < height * 0.8; y += 5) {
+      colDiff += Math.abs(getBrightness(x, y) - bgBrightness);
+    }
+    colDiff /= (height * 0.6 / 5);
+    if (colDiff > threshold) { right = Math.min(width - 1, x + 2); break; }
+  }
+
+  const detectedW = right - left;
+  const detectedH = bottom - top;
+  const aspectRatio = detectedW / detectedH;
+
+  const isValidRegion =
+    detectedW > width * 0.3 &&
+    detectedH > height * 0.3 &&
+    aspectRatio > 1.2 &&
+    aspectRatio < 3.0;
+
+  if (!isValidRegion) {
+    return { left: 10, top: 10, width: 80, height: 80 };
+  }
 
   return {
     left: (left / width) * 100,
     top: (top / height) * 100,
-    width: ((right - left) / width) * 100,
-    height: ((bottom - top) / height) * 100,
+    width: (detectedW / width) * 100,
+    height: (detectedH / height) * 100,
   };
 }
+
+const MAX_DETECT_SIZE = 800;
 
 export async function detectCardBounds(imageUrl: string): Promise<CropBounds> {
   try {
@@ -138,13 +150,17 @@ export async function detectCardBounds(imageUrl: string): Promise<CropBounds> {
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
 
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const scale = Math.min(1, MAX_DETECT_SIZE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.floor(bitmap.width * scale);
+    const h = Math.floor(bitmap.height * scale);
+
+    const canvas = new OffscreenCanvas(w, h);
     const ctx = canvas.getContext('2d');
     if (!ctx) return FALLBACK_BOUNDS;
 
-    ctx.drawImage(bitmap, 0, 0);
-    const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
-    const bounds = scanEdges(imageData, bitmap.width, bitmap.height);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const bounds = scanEdges(imageData, w, h);
     console.log('detectCardBounds result:', bounds);
     return bounds;
   } catch {
@@ -161,14 +177,20 @@ export async function detectCardBoundsFromUrl(url: string): Promise<CropBounds> 
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
+        const scale = Math.min(
+          1,
+          MAX_DETECT_SIZE / Math.max(img.naturalWidth, img.naturalHeight),
+        );
+        const w = Math.floor(img.naturalWidth * scale);
+        const h = Math.floor(img.naturalHeight * scale);
         const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(FALLBACK_BOUNDS);
-        ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
-        const bounds = scanEdges(data, img.naturalWidth, img.naturalHeight);
+        ctx.drawImage(img, 0, 0, w, h);
+        const data = ctx.getImageData(0, 0, w, h);
+        const bounds = scanEdges(data, w, h);
         console.log('detectCardBoundsFromUrl result:', bounds);
         resolve(bounds);
       } catch {
