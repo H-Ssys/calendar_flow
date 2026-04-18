@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Contact } from '@/types/contact';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ export interface ReferenceEntry {
 export interface ContactReferencesProps {
   contactId: string;
   references: ReferenceEntry[];
+  availableContacts?: Contact[];
   onAdd: (refId: string, label?: string) => void;
   onRemove: (refId: string) => void;
   onContactClick: (id: string) => void;
@@ -40,14 +42,6 @@ const LABEL_COLORS: Record<string, { bg: string; text: string }> = {
 };
 const DEFAULT_LABEL_COLOR = { bg: '#F1EFE8', text: '#5F5E5A' };
 
-/** Placeholder contacts for search — replaced with real data in D4 */
-const PLACEHOLDER_CONTACTS = [
-  { id: 'ph-1', name: 'Sarah Chen', company: 'Acme Corp', avatarColor: '#818cf8' },
-  { id: 'ph-2', name: 'Marcus Lee', company: 'Globex Inc', avatarColor: '#f59e0b' },
-  { id: 'ph-3', name: 'Yuki Tanaka', company: 'Initech', avatarColor: '#22c55e' },
-  { id: 'ph-4', name: 'Priya Patel', company: 'Umbrella LLC', avatarColor: '#ef4444' },
-];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
@@ -64,6 +58,7 @@ function initials(name: string) {
 export function ContactReferences({
   contactId,
   references,
+  availableContacts,
   onAdd,
   onRemove,
   onContactClick,
@@ -74,14 +69,21 @@ export function ContactReferences({
   const [newEmail, setNewEmail] = useState('');
 
   const addedIds = new Set(references.map((r) => r.refId));
+  const q = search.toLowerCase();
 
-  const filteredContacts = PLACEHOLDER_CONTACTS.filter(
-    (c) =>
+  const filteredContacts = (availableContacts ?? [])
+    .filter((c) =>
       !addedIds.has(c.id) &&
       c.id !== contactId &&
-      (c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.company?.toLowerCase().includes(search.toLowerCase())),
-  );
+      (c.displayName?.toLowerCase().includes(q) ||
+        c.company?.toLowerCase().includes(q)),
+    )
+    .map((c) => ({
+      id: c.id,
+      name: c.displayName,
+      company: c.company,
+      avatarColor: c.color ?? '#a3a3a3',
+    }));
 
   const handleSelectContact = (id: string) => {
     onAdd(id);
