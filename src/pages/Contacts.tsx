@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CalendarSidebar } from '@/components/calendar/CalendarSidebar';
 import { PageHeaderRight } from '@/components/PageHeaderRight';
 import { ContactProvider, useContactContext } from '@/context/ContactContext';
@@ -6,7 +6,7 @@ import { ContactDetail } from '@/components/contacts/ContactDetail';
 import { NewContactForm } from '@/components/contacts/NewContactForm';
 import { BatchUploadForm } from '@/components/contacts/BatchUploadForm';
 import { Contact, getInitials } from '@/types/contact';
-import { Users, Plus, Search, Heart, X, ChevronDown, ScanBarcode } from 'lucide-react';
+import { Users, Plus, Search, Heart, X, ChevronDown, ScanBarcode, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 
 // ── Inner component (needs context) ──────────────────────────────────
 const ContactsInner: React.FC = () => {
-  const { contacts, deleteContact, toggleStar } = useContactContext();
+  const { contacts, deleteContact, toggleStar, searchContacts } = useContactContext();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -25,24 +25,34 @@ const ContactsInner: React.FC = () => {
   const [showNewContact, setShowNewContact] = useState(false);
   const [showScanUpload, setShowScanUpload] = useState(false);
 
-  const selectedContact = selectedId ? contacts.find(c => c.id === selectedId) ?? null : null;
+  const [searchResults, setSearchResults] = useState<Contact[]>(contacts);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const selectedContact = selectedId
+    ? searchResults.find(c => c.id === selectedId) ?? contacts.find(c => c.id === selectedId) ?? null
+    : null;
+
+  // Debounced server-side FTS via search_text + reference_search_text tsvectors.
+  useEffect(() => {
+    if (!search.trim()) {
+      setSearchResults(contacts);
+      setIsSearching(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      const results = await searchContacts(search);
+      setSearchResults(results);
+      setIsSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, contacts, searchContacts]);
 
   const filteredContacts = useMemo(() => {
-    let list = [...contacts];
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(c =>
-        c.displayName.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.company?.toLowerCase().includes(q) ||
-        c.phone?.includes(q)
-      );
-    }
-    if (filterStarred) list = list.filter(c => c.starred);
-    // Starred first
-    list.sort((a, b) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0));
-    return list;
-  }, [contacts, search, filterStarred]);
+    const base = filterStarred ? searchResults.filter(c => c.starred) : searchResults;
+    // Starred first; don't mutate searchResults.
+    return [...base].sort((a, b) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0));
+  }, [searchResults, filterStarred]);
 
   // Group by first letter
   const grouped = useMemo(() => {
@@ -103,13 +113,18 @@ const ContactsInner: React.FC = () => {
                   placeholder="Search contacts..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  className="w-full pl-8 pr-7 py-1.5 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
                 />
-                {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {isSearching ? (
+                  <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/60 animate-spin" />
+                ) : search ? (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
                     <X className="w-3 h-3" />
                   </button>
-                )}
+                ) : null}
               </div>
               <button
                 onClick={() => setFilterStarred(!filterStarred)}

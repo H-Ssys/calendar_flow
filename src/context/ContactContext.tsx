@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Contact, CONTACT_COLORS } from '@/types/contact';
 import { supabase } from '@ofative/supabase-client';
 import { useAuthContext } from '@/context/AuthContext';
@@ -20,6 +20,7 @@ interface ContactContextType {
   toggleStar: (id: string) => Promise<void>;
   addContactReference: (contactId: string, refId: string, label?: string) => Promise<void>;
   removeContactReference: (contactId: string, refId: string) => Promise<void>;
+  searchContacts: (query: string) => Promise<Contact[]>;
 }
 
 const ContactContext = createContext<ContactContextType | undefined>(undefined);
@@ -139,6 +140,35 @@ export const ContactProvider: React.FC<{ children: ReactNode }> = ({ children })
       .eq('target_contact_id', tgt);
   };
 
+  // Server-side FTS across search_text (own row) + reference_search_text (name-
+  // of-referenced-contacts, maintained by trigger in migration 013 block 7).
+  // Uses the `simple` text search config to match migration 013's GENERATED tsvector.
+  // Memoized so the useEffect debouncer in Contacts.tsx has a stable identity and
+  // doesn't reset its timer on every ContactProvider re-render.
+  const searchContacts = useCallback(
+    async (query: string): Promise<Contact[]> => {
+      if (!query.trim()) return contacts;
+      if (!user?.id) return [];
+      const term = query.trim();
+      const { data, error } = await supabase
+        .from('active_contacts')
+        .select('*')
+        .eq('user_id', user.id)
+        .or(
+          `search_text.fts(simple).${term},` +
+          `reference_search_text.fts(simple).${term}`
+        )
+        .limit(50);
+      if (error) {
+        console.error('[ContactContext] search failed:', error);
+        return [];
+      }
+      if (!data) return [];
+      return (data as unknown as ContactRowLoose[]).map(mapV2ToV1);
+    },
+    [user?.id, contacts],
+  );
+
   return (
     <ContactContext.Provider
       value={{
@@ -149,6 +179,7 @@ export const ContactProvider: React.FC<{ children: ReactNode }> = ({ children })
         toggleStar,
         addContactReference,
         removeContactReference,
+        searchContacts,
       }}
     >
       {children}
