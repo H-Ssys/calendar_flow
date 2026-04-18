@@ -13,7 +13,6 @@ import {
   ExtractedData,
   ProcessedCard,
 } from '@/components/contacts/BatchCardItem';
-import { toast } from 'sonner';
 
 interface BatchUploadFormProps {
   open: boolean;
@@ -235,7 +234,6 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
       (c.frontFile || c.frontImage) ? { ...c, status: 'waiting' } : c,
     ));
     processingIndexRef.current = 0;
-    setMinimized(true); // Minimize to bubble immediately
     await processNextCard();
   };
 
@@ -291,55 +289,6 @@ export const BatchUploadForm: React.FC<BatchUploadFormProps> = ({ open, onClose,
     setCropOpen(false);
     resetProcessor();
   };
-
-  // ── Auto-save when minimized and extraction finishes ──────────────────────
-  const didAutoSaveRef = useRef(false);
-  useEffect(() => {
-    if (!minimized || extracting) {
-      didAutoSaveRef.current = false;
-      return;
-    }
-    if (didAutoSaveRef.current) return;
-    if (saveableCards.length === 0) return;
-
-    // All extraction is done — auto-save the results
-    didAutoSaveRef.current = true;
-    const names = saveableCards.map(c => c.extracted?.name || 'Contact').slice(0, 3);
-    const count = saveableCards.length;
-
-    saveableCards.forEach(card => {
-      addContact({
-        displayName: card.extracted?.name?.trim() || 'New Contact',
-        company: card.extracted?.company || undefined,
-        jobTitle: card.extracted?.title || undefined,
-        phone: card.extracted?.phone || undefined,
-        email: card.extracted?.email || undefined,
-        frontCardImage: card.frontImage,
-        backCardImage: card.backImage,
-        note: card.note,
-        front_ocr: card.extracted?.front_ocr ?? null,
-        back_ocr: card.extracted?.back_ocr ?? null,
-        alt_language: card.extracted?.alt_language ?? null,
-        tags: [],
-        starred: false,
-        linkedEventIds: [],
-        linkedTaskIds: [],
-        linkedNoteIds: [],
-      } as any);
-    });
-
-    const nameList = names.join(', ') + (count > 3 ? ` +${count - 3} more` : '');
-    toast.success(`${count} contact${count === 1 ? '' : 's'} saved!`, {
-      description: nameList,
-      duration: 5000,
-    });
-
-    setTimeout(() => {
-      reset();
-      onClose();
-    }, 2000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minimized, extracting, saveableCards.length]);
 
   const extractionStarted = processingIndexRef.current >= 0;
   const showSave = !extracting && saveableCards.length > 0;
