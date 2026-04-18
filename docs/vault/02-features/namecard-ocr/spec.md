@@ -73,3 +73,44 @@ reference_search_text tsvector, search_text tsvector GENERATED`.
 
 RLS is already enabled in 001. Migration 013 adds policies for the new
 `contact_references` table only (the base `contacts` policies remain in 006).
+
+## D7 — Post-launch fixes
+
+Backlog of items surfaced by D6 QA (`phase-d-qa.md`) and the D6-fix follow-up. Each is a separate ticket; D7-1 was the only blocker on closing D6 originally and is now logged as DEFERRED.
+
+### D7-1: Bidirectional contact ↔ event/task/note linking
+**Status:** FAIL in D6 QA — stubs not wired.
+**Root cause:** No `linked_contact_ids` column on `events`, `tasks`, or `notes`. `ContactDetail.handleAddEvent/Task/Note` are empty stubs (`/* wired in D5 */`). Repo-wide search confirms zero matches for `contactIds | contact_ids | linkedContactIds`.
+
+**Required work:**
+
+1. **Migration `015_contact_linking.sql`:**
+   ```sql
+   ALTER TABLE events ADD COLUMN linked_contact_ids uuid[] DEFAULT '{}';
+   ALTER TABLE tasks  ADD COLUMN linked_contact_ids uuid[] DEFAULT '{}';
+   ALTER TABLE notes  ADD COLUMN linked_contact_ids uuid[] DEFAULT '{}';
+   CREATE INDEX ON events USING gin(linked_contact_ids);
+   CREATE INDEX ON tasks  USING gin(linked_contact_ids);
+   CREATE INDEX ON notes  USING gin(linked_contact_ids);
+   ```
+
+2. Update `CalendarContext`, `TaskContext`, `NoteContext` to accept and persist `linked_contact_ids` on their `addEvent` / `addTask` / `addNote` APIs. Pass `[contact.id]` when the create flow originates from a contact.
+
+3. `ContactFlow` filter: replace the current `linkedEventIds.includes(e.id)` client filter with a Supabase query: `WHERE linked_contact_ids @> ARRAY[contact_id]`. (GIN index above makes this fast.)
+
+4. `ContactDetail.tsx:225–227` — wire `handleAddEvent / handleAddTask / handleAddNote` to call the relevant context add-API with `linked_contact_ids: [contact.id]` (or open the existing add-dialog pre-linked).
+
+### D7-2: Regenerate Supabase TypeScript types
+```
+npx supabase gen types typescript --project-id k14ezjygmt5klmcegmnex0h8
+```
+Regenerates `packages/shared-types/src/database.types.ts` to include `contact_references`, `contact_companies`, `contact_interactions`. Removes the `as never` casts currently used in `ContactContext.addContactReference / removeContactReference` and unblocks proper typing for the D6-fix `searchContacts` query.
+
+### D7-3: ContactReferences read from `contact_reference_pairs` view
+`ContactDetail.tsx:516` currently passes `references={[]}` — the add/remove handlers write to `contact_references` but the UI never round-trips. Wire a Supabase query against the bidirectional `contact_reference_pairs` view (migration 013 block 6, lines 163+) filtered by `contact_id = contact.id`. Map results to `ReferenceEntry[]` and pass to the component.
+
+### D7-4: `toggleStar` error rollback
+`ContactContext.toggleStar` (L100–111) flips local state optimistically and only logs on Supabase error — the UI is left lying. On error, revert `setContacts` to the previous value and (optionally) surface a toast. Same pattern is worth applying to `updateContact` and `deleteContact`.
+
+### D7-5: Card image upload wiring
+`ContactCardImages.onUploadFront / onUploadBack` callbacks are still stubs in `ContactDetail.tsx:331–332`. Wire to `flow-api`'s `POST /api/contacts/{id}/cards` endpoint (defined in `contact.md` contract §"API contracts"). Steps: open file picker → preprocess (HEIC → JPEG, resize) → POST multipart → on success update `front_image_url` / `back_image_url` via `updateContact`. Replaces the brittle `blob:` URLs the batch save flow currently persists.

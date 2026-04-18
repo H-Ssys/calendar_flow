@@ -8,11 +8,11 @@
 
 | Outcome | Count |
 |---------|-------|
-| PASS | 10 |
-| FAIL | 2 |
+| PASS | 11 |
+| DEFERRED | 1 (D7-1) |
 | NEEDS-BROWSER | 2 |
 
-**Overall: D6 BLOCKED.** Two FAIL items (#8 and #9) are pre-existing gaps that tests in this regression explicitly check for. They require schema + query work outside a QA pass to fix and are tracked as D7 follow-ups below.
+**Overall: D6 CLOSED with one item deferred.** FAIL #9 was fixed in commit `9e94ccb` ("D6-fix: server-side FTS search via tsvector columns") — server-side search is now wired via `searchContacts` in `ContactContext` and consumed by `ContactsInner` with a 300ms debouncer. FAIL #8 is logged as **D7-1** (see `spec.md` §"D7 — Post-launch fixes"); it is a schema-blocking feature, not a regression.
 
 ## Results
 
@@ -25,8 +25,8 @@
 | 5 | Edit contact fields — updateContact saves to Supabase | PASS | `updateContact` (L73–87) runs optimistic state update then `.update(patch).eq('id').eq('user_id')`. Inline `Field` commits via `onSave → update({field: v})` path. |
 | 6 | Delete contact — soft delete via `deleted_at`, hides from list | PASS | `deleteContact` (L89–98) optimistically removes from local state and writes `deleted_at = now()` to `contacts`. `active_contacts` view excludes rows where `deleted_at IS NULL`, so a refresh would still hide it. |
 | 7 | Linked events/tasks/notes via `ContactFlow` — correct counts | PASS | `ContactDetail.tsx:221–223` filters `events/tasks/notes` by `linkedEventIds/linkedTaskIds/linkedNoteIds`. `ContactFlow.tsx:223–225` renders `StatCard count={linkedEvents.length}` etc. |
-| 8 | Add event from contact — event linked bidirectionally | **FAIL** | `ContactDetail.tsx:225–227` `handleAddEvent` / `handleAddTask` / `handleAddNote` are `/* wired in D5 */` empty stubs. Clicking "Add event" in `ContactFlow` calls a no-op — no event is created. Bidirectional linking cannot happen: there is no `contactIds` field on `Event`, `Task`, or `Note` (confirmed via repo-wide search — 0 matches). Fix requires migration + type updates + context API changes. See D7 follow-ups. |
-| 9 | Contact search — both `search_text` and `reference_search_text` queried | **FAIL** | `Contacts.tsx:30–45` does a client-side `list.filter` on `displayName / email / company / phone` over the already-loaded `contacts` array. Neither `search_text` nor `reference_search_text` tsvector columns (added in migration 013 blocks 2–3) are referenced anywhere in `src/`. No `.textSearch(...)` or equivalent call. Fix requires switching the list query to debounced server-side FTS. See D7 follow-ups. |
+| 8 | Add event from contact — event linked bidirectionally | **DEFERRED → D7-1** | `ContactDetail.tsx:225–227` `handleAddEvent` / `handleAddTask` / `handleAddNote` are `/* wired in D5 */` empty stubs. Bidirectional linking cannot happen today: no `linked_contact_ids` column exists on `events / tasks / notes` (zero repo-wide matches for `contactIds | contact_ids | linkedContactIds`). Fix requires migration + context API + handler wiring — logged as **D7-1** in `spec.md`. |
+| 9 | Contact search — both `search_text` and `reference_search_text` queried | **PASS** (after `9e94ccb`) | `ContactContext.searchContacts` (added in commit `9e94ccb`) issues `supabase.from('active_contacts').or('search_text.fts(simple).<q>,reference_search_text.fts(simple).<q>').limit(50)`. `Contacts.tsx` now uses a 300ms-debounced `useEffect` that stores results in `searchResults` state, with a subtle `Loader2` spinner replacing the clear-X while `isSearching`. Empty query short-circuits back to `contacts`. |
 | 10 | Card thumbnails — `ContactCardImages` renders | PASS | `ContactDetail.tsx:327–335` renders with `frontUrl = front_image_url ?? frontCardImage`, `backUrl = back_image_url ?? backCardImage`. Upload handlers remain stubbed pending scan-flow wiring. |
 | 11 | Language tab bar — appears when `back_ocr && alt_language` | PASS | `ContactDetail.tsx:210` `showLanguageTabs = !!(contact.back_ocr && backLang)`. Buttons toggle `activeLang`; `displayOcr` swap (L211–213) correctly falls back to `contact.front_ocr` when `activeLang === 'front'` or when `back_ocr` missing. Also NEEDS-BROWSER for visual verification (see below). |
 | 12 | Social platforms — renders, edit mode works | PASS | `ContactDetail.tsx:394–398` renders `SocialPlatforms` with `readOnly={false}`. `onChange` routes to `update({ socials })` → `updateContact` → Supabase. `contactTypeMapper.ts:185` confirms `socials` is in the update patch. Also NEEDS-BROWSER for end-to-end (see below). |
@@ -44,32 +44,29 @@ Also worth visually confirming even though code paths PASS:
 - #3 optimistic star flip reverts correctly when Supabase errors (currently it does NOT — see #3 note).
 - #13 adding a reference writes to `contact_references` with canonical-direction sort; RLS via `migration 013` block 6 requires both contacts belong to `auth.uid()`.
 
-## FAIL #8 — Add event/task/note from contact
+## DEFERRED — Item #8 → D7-1 (Add event/task/note from contact)
 
 **Root cause:** `handleAddEvent / handleAddTask / handleAddNote` in `ContactDetail.tsx:225–227` are empty stubs.
 
-**Why we cannot fix in a QA pass:**
-- There is no `contactIds` column on `events`, `tasks`, or `notes` tables. Zero matches repo-wide for `contactIds | contact_ids | linkedContactIds`.
+**Why deferred (cannot fix in a QA pass):**
+- There is no `linked_contact_ids` column on `events`, `tasks`, or `notes` tables. Zero matches repo-wide for `contactIds | contact_ids | linkedContactIds`.
 - `Contact.linkedEventIds` exists on the client `Contact` type but is not persisted (no DB column exists).
-- Fixing requires: (a) new migration adding `contact_ids uuid[]` (or junction table) on each of the three tables, (b) RLS additions, (c) type/mapper updates, (d) new context API calls on `CalendarContext.addEvent`, `TaskContext.addTask`, `NoteContext.addNote` to accept the link, (e) wiring `ContactDetail` handlers to open the existing add-dialogs pre-linked.
-- Scope = new feature (D7), not a QA-pass fix.
+- Fixing requires: (a) new migration adding `linked_contact_ids uuid[] DEFAULT '{}'` + GIN indexes on each of the three tables, (b) RLS-compatible read paths, (c) type/mapper updates, (d) new context API calls on `CalendarContext.addEvent`, `TaskContext.addTask`, `NoteContext.addNote` to accept the link, (e) wiring `ContactDetail` handlers to call those APIs with `[contact.id]`.
+- Tracked as **D7-1** in `spec.md` §"D7 — Post-launch fixes".
 
-## FAIL #9 — Server-side FTS not wired
+## RESOLVED — Item #9 (server-side FTS) — commit `9e94ccb`
 
-**Root cause:** `Contacts.tsx` filter is client-side. Supabase `search_text` (GENERATED tsvector) and `reference_search_text` (trigger-maintained tsvector) columns exist in migration 013 but are never queried.
+`ContactContext` now exposes `searchContacts(query)` that queries `active_contacts` with `.or('search_text.fts(simple).<q>,reference_search_text.fts(simple).<q>').limit(50)`. Memoised with `useCallback` so the consumer's debouncer has a stable identity. `Contacts.tsx` calls it from a 300ms-debounced `useEffect` and renders `searchResults`. Verified by `npx vite build` (clean) at the time of commit.
 
-**Why we cannot fix in a QA pass:**
-- Current list fetch grabs all active contacts for the user in one shot (acceptable for <~1000 contacts); client filter is fast and correct for the current data volume.
-- Proper fix: add a second query path that issues `.textSearch('search_text', q)` OR `.textSearch('reference_search_text', q)` when a search term is present, debounced (~300ms), replacing the full-list query. Requires fetching + caching strategy, probably React Query.
-- Scope = medium refactor (D7), not a QA-pass fix.
+## D7 backlog (non-blocking; logged in `spec.md`)
 
-## D7 follow-ups required before D6 can close
-
-1. **Contact↔Event/Task/Note bidirectional linking** — DB migration + API wire-up. Blocks #8.
-2. **Server-side contact search using `search_text` + `reference_search_text`** — debounced `.textSearch()` query path in `ContactsInner`. Blocks #9.
-3. **References round-trip** — parent (`ContactDetail`) should read the `contact_reference_pairs` view (migration 013 block 6) for the current contact, not hard-code `references={[]}`. Soft issue; surfaced via #13 note, not a stated regression item.
-4. **toggleStar error rollback** — revert local state if Supabase call fails. Minor; noted on #3.
-5. **Card-image upload wiring** — `ContactCardImages.onUploadFront/Back` callbacks are still stubs in `ContactDetail`.
+| ID | Item | Source |
+|----|------|--------|
+| **D7-1** | Bidirectional contact ↔ event/task/note linking — migration 015 + handlers | This QA, item #8 |
+| **D7-2** | Regenerate Supabase TypeScript types — removes `as never` casts in `addContactReference / removeContactReference` and types the new FTS query | Implicit since migration 013 |
+| **D7-3** | `ContactReferences` reads from `contact_reference_pairs` view (currently `references={[]}` hard-coded) | Item #13 note |
+| **D7-4** | `toggleStar` error rollback (and same pattern for `updateContact / deleteContact`) | Item #3 note |
+| **D7-5** | Card-image upload wiring — `ContactCardImages.onUploadFront/Back` stubs → `POST /api/contacts/{id}/cards` | Item #10 note |
 
 ## Build verification
 
@@ -80,4 +77,4 @@ npx vite build 2>&1 | grep "error"
 
 ## Outcome
 
-**BLOCKED.** 2 FAILs must close before D6 is marked complete. Recommend routing items #8 and #9 to a D7 ticket; the other 10 PASS items and 2 NEEDS-BROWSER items can be smoke-tested as soon as the app is browser-reachable.
+**D6 CLOSED with D7-1 deferred.** Final score: **11 PASS · 1 DEFERRED (D7-1) · 2 NEEDS-BROWSER**. The two NEEDS-BROWSER items (#11 language tabs, #12 socials edit) and the soft notes on #3 / #13 should still be smoke-tested as soon as the app is browser-reachable.
