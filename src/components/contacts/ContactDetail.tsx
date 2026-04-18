@@ -19,6 +19,9 @@ import { SocialPlatforms } from '@/components/contacts/SocialPlatforms';
 import { ContactReferences } from '@/components/contacts/ContactReferences';
 import { ContactFlow } from '@/components/contacts/ContactFlow';
 import { getLanguageDisplayName } from '@/constants/languageDisplayNames';
+import { useCalendar } from '@/context/CalendarContext';
+import { useTaskContext } from '@/context/TaskContext';
+import { useNoteContext } from '@/context/NoteContext';
 
 interface ContactDetailProps {
   contact: Contact;
@@ -174,9 +177,13 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ contact, onSave, on
 /* ── Main component ─────────────────────────────────────────────────── */
 export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }) => {
   const {
+    contacts,
     updateContact, deleteContact, toggleStar,
     addContactReference, removeContactReference,
   } = useContactContext();
+  const { events } = useCalendar();
+  const { tasks } = useTaskContext();
+  const { notes } = useNoteContext();
   const [tagInput, setTagInput] = useState('');
   const [showEdit, setShowEdit] = useState(false);
   const [showAlt, setShowAlt] = useState(false);
@@ -207,6 +214,13 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
 
   // ── Flow + references wiring ──────────────────────────────────────────
   const contactReferences: [] = [];
+  const availableContacts = contacts.filter(c => c.id !== contact.id);
+  const linkedEventIds = contact.linkedEventIds ?? [];
+  const linkedTaskIds  = contact.linkedTaskIds ?? [];
+  const linkedNoteIds  = contact.linkedNoteIds ?? [];
+  const linkedEvents = events.filter(e => linkedEventIds.includes(e.id));
+  const linkedTasks  = tasks.filter(t => linkedTaskIds.includes(t.id));
+  const linkedNotes  = notes.filter(n => linkedNoteIds.includes(n.id));
   const navigateToContact = (_id: string) => { /* wired in D5 */ };
   const handleAddEvent = () => { /* wired in D5 */ };
   const handleAddTask = () => { /* wired in D5 */ };
@@ -501,6 +515,7 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
             <ContactReferences
               contactId={contact.id}
               references={contactReferences}
+              availableContacts={availableContacts}
               onAdd={(refId, label) => addContactReference(contact.id, refId, label)}
               onRemove={(refId) => removeContactReference(contact.id, refId)}
               onContactClick={(id) => navigateToContact(id)}
@@ -511,9 +526,9 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contact, onClose }
           <div className="px-4 py-3 border-b border-border">
             <ContactFlow
               contactId={contact.id}
-              linkedEventIds={contact.linkedEventIds ?? []}
-              linkedTaskIds={contact.linkedTaskIds ?? []}
-              linkedNoteIds={contact.linkedNoteIds ?? []}
+              linkedEvents={linkedEvents}
+              linkedTasks={linkedTasks}
+              linkedNotes={linkedNotes}
               onAddEvent={() => handleAddEvent()}
               onAddTask={() => handleAddTask()}
               onAddNote={() => handleAddNote()}

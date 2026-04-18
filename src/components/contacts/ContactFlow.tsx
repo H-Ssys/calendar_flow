@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, FileText, Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import type { Event } from '@/context/CalendarContext';
+import type { Task, TaskPriority } from '@/types/task';
+import type { Note } from '@/types/note';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface ContactFlowProps {
   contactId: string;
-  linkedEventIds: string[];
-  linkedTaskIds: string[];
-  linkedNoteIds: string[];
+  linkedEvents: Event[];
+  linkedTasks: Task[];
+  linkedNotes: Note[];
   onAddEvent: () => void;
   onAddTask: () => void;
   onAddNote: () => void;
@@ -23,8 +26,13 @@ interface FlowItem {
   id: string;
   type: ItemType;
   title: string;
-  date: string;
+  /** Display date string */
+  dateLabel: string;
+  /** Date used for sorting (ms since epoch). */
+  sortKey: number;
   status: string;
+  /** Optional per-item status tint override (used for task priority). */
+  tint?: { bg: string; text: string };
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -35,15 +43,54 @@ const TYPE_CONFIG: Record<ItemType, { dot: string; icon: React.ElementType; stat
   note:  { dot: 'bg-teal-500', icon: FileText, statusBg: 'bg-teal-50 dark:bg-teal-950/40', statusText: 'text-teal-700 dark:text-teal-300' },
 };
 
-/** Placeholder items — replaced with real data in D4 */
-const PLACEHOLDER_ITEMS: FlowItem[] = [
-  { id: 'ph-e1', type: 'event', title: 'Coffee meeting', date: '2026-04-15', status: 'Upcoming' },
-  { id: 'ph-e2', type: 'event', title: 'Product demo call', date: '2026-04-10', status: 'Completed' },
-  { id: 'ph-t1', type: 'task', title: 'Send proposal draft', date: '2026-04-14', status: 'In Progress' },
-  { id: 'ph-t2', type: 'task', title: 'Follow up on invoice', date: '2026-04-12', status: 'Done' },
-  { id: 'ph-n1', type: 'note', title: 'Meeting notes — vision & roadmap', date: '2026-04-13', status: 'Note' },
-  { id: 'ph-n2', type: 'note', title: 'Key preferences & dietary needs', date: '2026-04-08', status: 'Note' },
-];
+const PRIORITY_TINT: Record<TaskPriority, { bg: string; text: string }> = {
+  urgent: { bg: 'bg-red-50 dark:bg-red-950/40',    text: 'text-red-700 dark:text-red-300' },
+  high:   { bg: 'bg-orange-50 dark:bg-orange-950/40', text: 'text-orange-700 dark:text-orange-300' },
+  medium: { bg: 'bg-amber-50 dark:bg-amber-950/40',   text: 'text-amber-700 dark:text-amber-300' },
+  low:    { bg: 'bg-slate-50 dark:bg-slate-900/40',   text: 'text-slate-600 dark:text-slate-300' },
+};
+
+// ─── Adapters: domain → FlowItem ─────────────────────────────────────────────
+
+function eventToFlowItem(e: Event): FlowItem {
+  const start = new Date(e.startTime);
+  const now = Date.now();
+  const status = start.getTime() >= now ? 'Upcoming' : 'Past';
+  return {
+    id: e.id,
+    type: 'event',
+    title: e.title,
+    dateLabel: format(start, 'MMM d, yyyy'),
+    sortKey: start.getTime(),
+    status,
+  };
+}
+
+function taskToFlowItem(t: Task): FlowItem {
+  const due = t.dueDate ? new Date(t.dueDate) : undefined;
+  const sortKey = due?.getTime() ?? new Date(t.updatedAt).getTime();
+  return {
+    id: t.id,
+    type: 'task',
+    title: t.title,
+    dateLabel: due ? format(due, 'MMM d, yyyy') : 'No due date',
+    sortKey,
+    status: t.priority,
+    tint: PRIORITY_TINT[t.priority],
+  };
+}
+
+function noteToFlowItem(n: Note): FlowItem {
+  const updated = new Date(n.updatedAt);
+  return {
+    id: n.id,
+    type: 'note',
+    title: n.title,
+    dateLabel: format(updated, 'MMM d, yyyy'),
+    sortKey: updated.getTime(),
+    status: 'Note',
+  };
+}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -62,6 +109,7 @@ function StatCard({ count, label }: { count: number; label: string }) {
 
 function FlowItemRow({ item }: { item: FlowItem }) {
   const cfg = TYPE_CONFIG[item.type];
+  const tint = item.tint ?? { bg: cfg.statusBg, text: cfg.statusText };
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
       <span className={`h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
@@ -69,9 +117,9 @@ function FlowItemRow({ item }: { item: FlowItem }) {
         <span className="text-[13px] font-medium text-neutral-700 dark:text-neutral-200 truncate">
           {item.title}
         </span>
-        <span className="text-[11px] text-neutral-400">{item.date}</span>
+        <span className="text-[11px] text-neutral-400">{item.dateLabel}</span>
       </div>
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.statusBg} ${cfg.statusText}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${tint.bg} ${tint.text}`}>
         {item.status}
       </span>
     </div>
@@ -147,28 +195,34 @@ function AddButton({
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function ContactFlow({
-  contactId,
-  linkedEventIds,
-  linkedTaskIds,
-  linkedNoteIds,
+  linkedEvents,
+  linkedTasks,
+  linkedNotes,
   onAddEvent,
   onAddTask,
   onAddNote,
 }: ContactFlowProps) {
   const [activeTab, setActiveTab] = useState('all');
 
-  const events = PLACEHOLDER_ITEMS.filter((i) => i.type === 'event');
-  const tasks = PLACEHOLDER_ITEMS.filter((i) => i.type === 'task');
-  const notes = PLACEHOLDER_ITEMS.filter((i) => i.type === 'note');
-  const allSorted = [...PLACEHOLDER_ITEMS].sort((a, b) => b.date.localeCompare(a.date));
+  const eventItems = useMemo(() => linkedEvents.map(eventToFlowItem), [linkedEvents]);
+  const taskItems  = useMemo(() => linkedTasks.map(taskToFlowItem),  [linkedTasks]);
+  const noteItems  = useMemo(() => linkedNotes.map(noteToFlowItem),  [linkedNotes]);
+
+  const allSorted = useMemo(
+    () => [...eventItems, ...taskItems, ...noteItems].sort((a, b) => b.sortKey - a.sortKey),
+    [eventItems, taskItems, noteItems],
+  );
+  const eventsSorted = useMemo(() => [...eventItems].sort((a, b) => b.sortKey - a.sortKey), [eventItems]);
+  const tasksSorted  = useMemo(() => [...taskItems].sort((a, b) => b.sortKey - a.sortKey),  [taskItems]);
+  const notesSorted  = useMemo(() => [...noteItems].sort((a, b) => b.sortKey - a.sortKey),  [noteItems]);
 
   return (
     <div className="flex flex-col gap-3">
       {/* ── Stats row ──────────────────────────────────────────────────── */}
       <div className="flex gap-2">
-        <StatCard count={linkedEventIds.length} label="Events" />
-        <StatCard count={linkedTaskIds.length} label="Tasks" />
-        <StatCard count={linkedNoteIds.length} label="Notes" />
+        <StatCard count={linkedEvents.length} label="Events" />
+        <StatCard count={linkedTasks.length} label="Tasks" />
+        <StatCard count={linkedNotes.length} label="Notes" />
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
@@ -193,22 +247,22 @@ export function ContactFlow({
 
         <TabsContent value="all" className="mt-1">
           {allSorted.length === 0 ? <EmptyState label="No activity yet" /> : (
-            <div className="flex flex-col">{allSorted.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
+            <div className="flex flex-col">{allSorted.map((i) => <FlowItemRow key={`${i.type}:${i.id}`} item={i} />)}</div>
           )}
         </TabsContent>
         <TabsContent value="events" className="mt-1">
-          {events.length === 0 ? <EmptyState label="No events yet" /> : (
-            <div className="flex flex-col">{events.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
+          {eventsSorted.length === 0 ? <EmptyState label="No events yet" /> : (
+            <div className="flex flex-col">{eventsSorted.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
           )}
         </TabsContent>
         <TabsContent value="tasks" className="mt-1">
-          {tasks.length === 0 ? <EmptyState label="No tasks yet" /> : (
-            <div className="flex flex-col">{tasks.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
+          {tasksSorted.length === 0 ? <EmptyState label="No tasks yet" /> : (
+            <div className="flex flex-col">{tasksSorted.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
           )}
         </TabsContent>
         <TabsContent value="notes" className="mt-1">
-          {notes.length === 0 ? <EmptyState label="No notes yet" /> : (
-            <div className="flex flex-col">{notes.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
+          {notesSorted.length === 0 ? <EmptyState label="No notes yet" /> : (
+            <div className="flex flex-col">{notesSorted.map((i) => <FlowItemRow key={i.id} item={i} />)}</div>
           )}
         </TabsContent>
       </Tabs>
