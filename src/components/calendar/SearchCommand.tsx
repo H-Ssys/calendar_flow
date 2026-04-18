@@ -8,7 +8,7 @@ import {
     CommandList,
     CommandSeparator,
 } from '@/components/ui/command';
-import { Calendar, CheckSquare, FileText, ArrowUp, ArrowDown, CornerDownLeft } from 'lucide-react';
+import { Calendar, CheckSquare, FileText, Users, ArrowUp, ArrowDown, CornerDownLeft } from 'lucide-react';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
 import { useCalendar } from '@/context/CalendarContext';
 import { useNoteContext } from '@/context/NoteContext';
@@ -47,6 +47,11 @@ export const SearchCommand: React.FC<SearchCommandProps> = ({ open, onOpenChange
     const handleNoteSelect = (noteId: string) => {
         setActiveNote(noteId);
         navigate('/notes');
+        close();
+    };
+
+    const handleContactSelect = () => {
+        navigate('/contacts');
         close();
     };
 
@@ -129,7 +134,7 @@ export const SearchCommand: React.FC<SearchCommandProps> = ({ open, onOpenChange
                     </CommandGroup>
                 )}
 
-                {results.tasks.length > 0 && results.notes.length > 0 && (
+                {results.tasks.length > 0 && (results.notes.length > 0 || results.contacts.length > 0) && (
                     <CommandSeparator className="my-1" />
                 )}
 
@@ -153,6 +158,48 @@ export const SearchCommand: React.FC<SearchCommandProps> = ({ open, onOpenChange
                                 </div>
                             </CommandItem>
                         ))}
+                    </CommandGroup>
+                )}
+
+                {results.notes.length > 0 && results.contacts.length > 0 && (
+                    <CommandSeparator className="my-1" />
+                )}
+
+                {/* Contacts — snippet: "{name} · {company}" (+ altDisplayName if alt_language set) */}
+                {results.contacts.length > 0 && (
+                    <CommandGroup heading="Contacts">
+                        {results.contacts.map(contact => {
+                            const parts = [contact.displayName, contact.company].filter(Boolean) as string[];
+                            let snippet = parts.join(' · ');
+                            const altDisplay = [contact.altFirstName, contact.altLastName]
+                                .filter(Boolean)
+                                .join(' ')
+                                .trim();
+                            if (contact.alt_language && altDisplay && altDisplay !== contact.displayName) {
+                                snippet = snippet ? `${snippet} (+ ${altDisplay})` : `(+ ${altDisplay})`;
+                            }
+                            return (
+                                <CommandItem
+                                    key={contact.id}
+                                    className="flex items-center gap-3 py-2.5 cursor-pointer"
+                                    onSelect={handleContactSelect}
+                                >
+                                    <div
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                                        style={{ backgroundColor: contact.color ?? '#a3a3a3' }}
+                                    >
+                                        {contact.displayName?.slice(0, 2).toUpperCase() || '?'}
+                                    </div>
+                                    <div className="flex flex-col flex-1 min-w-0">
+                                        <span className="font-medium text-sm text-foreground truncate">{contact.displayName}</span>
+                                        {snippet && (
+                                            <span className="text-xs text-muted-foreground truncate">{snippet}</span>
+                                        )}
+                                    </div>
+                                    <Users className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                </CommandItem>
+                            );
+                        })}
                     </CommandGroup>
                 )}
 
